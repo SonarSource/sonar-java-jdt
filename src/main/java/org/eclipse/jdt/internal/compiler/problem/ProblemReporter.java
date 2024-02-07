@@ -12499,6 +12499,6 @@ public boolean scheduleProblemForContext(Runnable problemComputation) {
  */
 @Override
 public void close() {
-	this.referenceContext = null;
+	// Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.36.0
 }
 }
