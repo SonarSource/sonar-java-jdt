@@ -27,6 +27,10 @@ container_definition: &CONTAINER_DEFINITION
   namespace: default
 
 
+only_sonarsource_qa: &ONLY_SONARSOURCE_QA
+  only_if: $CIRRUS_USER_COLLABORATOR == 'true' && $CIRRUS_TAG == "" && ($CIRRUS_PR != "" || $CIRRUS_BRANCH == "master" || $CIRRUS_BRANCH =~ "branch-.*" || $CIRRUS_BRANCH =~ "dogfood-on-.*")
+
+
 build_task:
   eks_container:
     <<: *CONTAINER_DEFINITION
@@ -62,7 +66,7 @@ ws_scan_task:
   whitesource_script:
     - source cirrus-env QA
     - source set_maven_build_version $BUILD_NUMBER
-    - mvn clean install
+    - mvn clean install -DskipTests
     - source ws_scan.sh
   allow_failures: "true"
   always:
