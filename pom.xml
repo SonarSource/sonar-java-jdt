@@ -18,8 +18,12 @@
      This project contains some code from https://github.com/eclipse-jdt/eclipse.jdt.core with some minor changes.
      It does not match our code quality standard and can not be analyzed like other code in this repository.
     -->
-    <sonar.skip>true</sonar.skip>
+    <sonar.exclusions>src/main/java/org/eclipse/jdt/**</sonar.exclusions>
     <jdk.min.version>17</jdk.min.version>
+    <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
+    <!-- Release: enable publication to Bintray -->
+    <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
+
   </properties>
 
   <scm>
@@ -119,8 +123,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <createSourcesJar>true</createSourcesJar>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
               <filters>
                 <filter>
                   <artifact>*:*</artifact>
@@ -147,29 +150,6 @@
             <goals>
               <goal>clean</goal>
             </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>unpack</goal>
-            </goals>
-            <configuration>
-              <artifactItems>
-                <artifactItem>
-                  <groupId>${project.groupId}</groupId>
-                  <artifactId>jdt-package</artifactId>
-                  <classifier>shaded</classifier>
-                  <version>${project.version}</version>
-                  <outputDirectory>${project.build.directory}/classes</outputDirectory>
-                </artifactItem>
-              </artifactItems>
-            </configuration>
           </execution>
         </executions>
       </plugin>

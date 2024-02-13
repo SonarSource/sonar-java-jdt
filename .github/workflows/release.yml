@@ -14,6 +14,5 @@ jobs:
       contents: write
     uses: SonarSource/gh-action_release/.github/workflows/main.yaml@v5
     with:
-      publishToBinaries: true
       mavenCentralSync: true
       slackChannel: team-lang-java-notifs
