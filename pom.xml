@@ -23,6 +23,7 @@
     <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
+    <maven.source.skip>true</maven.source.skip>
     <src.dir>src/main/java</src.dir>
 
   </properties>
@@ -136,6 +137,23 @@
                 </filter>
               </filters>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+      Following workaround is needed for IDEs, which otherwise use original classes, what causes java.lang.SecurityException
+      "signer information does not match signer information of other classes in the same package"
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-clean-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
