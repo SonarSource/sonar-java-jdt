@@ -24,7 +24,6 @@
     <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
-    <maven.source.skip>true</maven.source.skip>
 
   </properties>
 
