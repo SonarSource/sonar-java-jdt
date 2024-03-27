@@ -23,6 +23,7 @@
     <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
+    <src.dir>src/main/java</src.dir>
 
   </properties>
 
