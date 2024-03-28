@@ -24,7 +24,6 @@
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
     <maven.source.skip>true</maven.source.skip>
-    <src.dir>src/main/java</src.dir>
 
   </properties>
 
