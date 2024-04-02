@@ -13,6 +13,11 @@
   <artifactId>jdt-package</artifactId>
   <version>1.1-SNAPSHOT</version>
 
+  <organization>
+    <name>SonarSource</name>
+    <url>http://www.sonarsource.com</url>
+  </organization>
+
   <properties>
     <!-- Temporary workaround to force inclusion of pom.xml because of https://sonarsource.atlassian.net/browse/MSONAR-218 -->
     <sonar.sources>.</sonar.sources>
