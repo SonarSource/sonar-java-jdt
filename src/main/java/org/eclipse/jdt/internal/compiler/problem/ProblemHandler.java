@@ -128,6 +128,16 @@ public void handle(
 
 	 boolean mandatory = (severity & (ProblemSeverities.Error | ProblemSeverities.Optional)) == ProblemSeverities.Error;
 	 if ((severity & ProblemSeverities.InternalError) == 0 && this.policy.ignoreAllErrors()) {
+		 // Error is not to be exposed, but clients may need still notification as to whether there are silently-ignored-errors.
+		 // if no reference context, we need to abort from the current compilation process
+		 if (referenceContext == null) {
+			 if ((severity & ProblemSeverities.Error) != 0) { // non reportable error is fatal
+				 CategorizedProblem problem = this.createProblem(null, problemId, problemArguments, elaborationId, messageArguments, severity, 0, 0, 0, 0);
+				 throw new AbortCompilation(null, problem);
+			 } else {
+				 return; // ignore non reportable warning
+			 }
+		 }
 		 return;
 	 }
 
@@ -144,7 +154,12 @@ public void handle(
 
 	// if no reference context, we need to abort from the current compilation process
 	if (referenceContext == null) {
-		return; // ignore non reportable problems
+		if ((severity & ProblemSeverities.Error) != 0) { // non reportable error is fatal
+			CategorizedProblem problem = this.createProblem(null, problemId, problemArguments, elaborationId, messageArguments, severity, 0, 0, 0, 0);
+			throw new AbortCompilation(null, problem);
+		} else {
+			return; // ignore non reportable warning
+		}
 	}
 
 	int[] lineEnds;
