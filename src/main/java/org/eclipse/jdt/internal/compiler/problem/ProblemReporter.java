@@ -12620,6 +12620,6 @@ public boolean scheduleProblemForContext(Runnable problemComputation) {
  * </ul></ul>
  */
 public void close() {
-	this.referenceContext = null;
+	// Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
 }
 }
