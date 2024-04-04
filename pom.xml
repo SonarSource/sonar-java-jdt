@@ -56,13 +56,21 @@
     </license>
   </licenses>
 
+   <repositories>
+    <repository>
+      <id>eclipse</id>
+      <name>eclipse-snapshots</name>
+      <url>https://repo.eclipse.org/content/repositories/eclipse-snapshots/</url>
+    </repository>
+  </repositories>
+
   <dependencyManagement>
     <dependencies>
       <dependency>
         <groupId>org.eclipse.jdt</groupId>
         <artifactId>org.eclipse.jdt.core</artifactId>
         <!-- see jdt/README.md before changing this version to also backport the new source code into the files of jdt/src/main/java -->
-        <version>3.37.0</version>
+        <version>3.38.0-SNAPSHOT</version>
         <exclusions>
           <exclusion>
             <groupId>org.eclipse.platform</groupId>
