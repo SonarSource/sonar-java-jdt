@@ -62,7 +62,7 @@
         <groupId>org.eclipse.jdt</groupId>
         <artifactId>org.eclipse.jdt.core</artifactId>
         <!-- see jdt/README.md before changing this version to also backport the new source code into the files of jdt/src/main/java -->
-        <version>3.37.0</version>
+        <version>3.38.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.eclipse.platform</groupId>
