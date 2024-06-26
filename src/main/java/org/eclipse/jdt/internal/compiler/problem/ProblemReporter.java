@@ -82,7 +82,6 @@ package org.eclipse.jdt.internal.compiler.problem;
 
 import java.io.CharConversionException;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -700,6 +699,7 @@ public static int getIrritant(int problemID) {
 		case IProblem.NotOwningResourceField:
 		case IProblem.OwningFieldInNonResourceClass:
 		case IProblem.OwningFieldShouldImplementClose:
+		case IProblem.StaticResourceField:
 			return CompilerOptions.InsufficientResourceManagement;
 		case IProblem.OverrideReducingParamterOwning:
 		case IProblem.OverrideAddingReturnOwning:
@@ -1327,6 +1327,24 @@ public void bytecodeExceeds64KLimit(AbstractMethodDeclaration location) {
 	} else {
 		bytecodeExceeds64KLimit(method,	location.sourceStart, location.sourceEnd);
 	}
+}
+public void operandStackExceeds64KLimit(ASTNode location) {
+		this.handle(
+			IProblem.OperandStackExceeds64KLimit,
+			NoArgument,
+			NoArgument,
+			ProblemSeverities.Error | ProblemSeverities.Abort | ProblemSeverities.Fatal,
+			location.sourceStart,
+			location.sourceEnd);
+}
+public void operandStackSizeInappropriate(ASTNode location) {
+	this.handle(
+		IProblem.OperandStackSizeInappropriate,
+		NoArgument,
+		NoArgument,
+		ProblemSeverities.Warning,
+		location.sourceStart,
+		location.sourceEnd);
 }
 public void bytecodeExceeds64KLimit(LambdaExpression location) {
 	bytecodeExceeds64KLimit(location.binding, location.sourceStart, location.diagnosticsSourceEnd());
@@ -2007,6 +2025,8 @@ String deprecatedSinceValue(Supplier<AnnotationBinding[]> annotations) {
 		ReferenceContext contextSave = this.referenceContext;
 		try {
 			for (AnnotationBinding annotationBinding : annotations.get()) {
+				if (annotationBinding == null)
+					continue;
 				if (annotationBinding.getAnnotationType().id == TypeIds.T_JavaLangDeprecated) {
 					for (ElementValuePair elementValuePair : annotationBinding.getElementValuePairs()) {
 						if (CharOperation.equals(elementValuePair.getName(), TypeConstants.SINCE) && elementValuePair.value instanceof StringConstant)
@@ -3188,7 +3208,7 @@ public void illegalModifierForMethod(AbstractMethodDeclaration methodDecl) {
 }
 public void illegalModifierForVariable(LocalDeclaration localDecl, boolean complainAsArgument) {
 	String[] arguments = new String[] {new String(localDecl.name)};
-	int problemId = ((localDecl.modifiers & ExtraCompilerModifiers.AccOutOfFlowScope) != 0) ?
+	int problemId = localDecl.binding.isPatternVariable() ?
 			IProblem.IllegalModifierForPatternVariable :
 			(complainAsArgument
 					? IProblem.IllegalModifierForArgument
@@ -4868,9 +4888,9 @@ public void invalidType(ASTNode location, TypeBinding type) {
 			List<TypeBinding> missingTypes = type.collectMissingTypes(null);
 			if (missingTypes != null) {
 				ReferenceContext savedContext = this.referenceContext;
-				for (Iterator<TypeBinding> iterator = missingTypes.iterator(); iterator.hasNext(); ) {
+				for (TypeBinding missingType : missingTypes) {
 					try {
-						invalidType(location, iterator.next());
+						invalidType(location, missingType);
 					} finally {
 						this.referenceContext = savedContext; // nested reporting will have reset referenceContext
 					}
@@ -5281,8 +5301,8 @@ private boolean isRecoveredName(char[] simpleName) {
 
 private boolean isRecoveredName(char[][] qualifiedName) {
 	if(qualifiedName == null) return false;
-	for (int i = 0; i < qualifiedName.length; i++) {
-		if(qualifiedName[i] == RecoveryScanner.FAKE_IDENTIFIER) return true;
+	for (char[] segment : qualifiedName) {
+		if(segment == RecoveryScanner.FAKE_IDENTIFIER) return true;
 	}
 	return false;
 }
@@ -6404,6 +6424,8 @@ public boolean expressionNonNullComparison(Expression expr, boolean checkForNull
 			return false;
 		}
 		// fall through to bottom
+	} else if (expr instanceof LambdaExpression) {
+		// not very useful code, but humor the user
 	} else {
 		needImplementation(expr); // want to see if we get here
 		return false;
@@ -8086,6 +8108,15 @@ public void resourceHasToImplementAutoCloseable(TypeBinding binding, ASTNode ref
 			new String[] {new String(binding.shortReadableName())},
 			reference.sourceStart,
 			reference.sourceEnd);
+}
+public void resourceNotAValue(NameReference node) {
+	String[] arguments = { node.toString() };
+	this.handle(
+			IProblem.ResourceIsNotAValue,
+			arguments,
+			arguments,
+			node.sourceStart,
+			node.sourceEnd);
 }
 private int retrieveClosingAngleBracketPosition(int start) {
 	if (this.referenceContext == null) return start;
@@ -10307,6 +10338,14 @@ public void shouldMarkFieldAsOwning(ASTNode location) {
 		location.sourceStart,
 		location.sourceEnd);
 }
+public void staticResourceField(FieldDeclaration fieldDeclaration) {
+	this.handle(
+		IProblem.StaticResourceField,
+		NoArgument,
+		NoArgument,
+		fieldDeclaration.sourceStart,
+		fieldDeclaration.sourceEnd);
+}
 public void shouldImplementAutoCloseable(ASTNode location) {
 	char[] name = this.options.owningAnnotationName[this.options.owningAnnotationName.length-1];
 	String[] args = { String.valueOf(name) };
@@ -10473,8 +10512,7 @@ public void nullityMismatchVariableIsFreeTypeVariable(VariableBinding variable, 
 public void illegalRedefinitionToNonNullParameter(Argument argument, ReferenceBinding declaringClass, char[][] inheritedAnnotationName) {
 	int sourceStart = argument.type.sourceStart;
 	if (argument.annotations != null) {
-		for (int i=0; i<argument.annotations.length; i++) {
-			Annotation annotation = argument.annotations[i];
+		for (Annotation annotation : argument.annotations) {
 			if (annotation.hasNullBit(TypeIds.BitNonNullAnnotation|TypeIds.BitNullableAnnotation)) {
 				sourceStart = annotation.sourceStart;
 				break;
@@ -10530,8 +10568,7 @@ public void inheritedParameterLackingNonnullAnnotation(MethodBinding currentMeth
 public void illegalParameterRedefinition(Argument argument, ReferenceBinding declaringClass, TypeBinding inheritedParameter) {
 	int sourceStart = argument.type.sourceStart;
 	if (argument.annotations != null) {
-		for (int i=0; i<argument.annotations.length; i++) {
-			Annotation annotation = argument.annotations[i];
+		for (Annotation annotation : argument.annotations) {
 			if (annotation.hasNullBit(TypeIds.BitNonNullAnnotation|TypeIds.BitNullableAnnotation)) {
 				sourceStart = annotation.sourceStart;
 				break;
@@ -12418,6 +12455,14 @@ public void illegalFallthroughFromAPattern(Statement statement) {
 		statement.sourceStart,
 		statement.sourceEnd);
 	}
+public void namedPatternVariablesDisallowedHere(LocalDeclaration variableDeclaration) {
+	this.handle(
+		IProblem.NamedPatternVariablesDisallowedHere,
+		NoArgument,
+		NoArgument,
+		variableDeclaration.sourceStart,
+		variableDeclaration.sourceEnd);
+}
 public void illegalCaseConstantCombination(Expression element) {
 	this.handle(
 			IProblem.ConstantWithPatternIncompatible,
@@ -12530,6 +12575,38 @@ public void unnamedVariableMustHaveInitializer(LocalDeclaration variableDeclarat
 			variableDeclaration.sourceStart,
 			variableDeclaration.sourceEnd);
 }
+public void errorExpressionInPreConstructorContext(Expression expr) {
+	String[] arguments = new String[] {expr.toString()};
+	this.handle(
+		IProblem.ExpressionInPreConstructorContext,
+		arguments,
+		arguments,
+		expr.sourceStart,
+		expr.sourceEnd);
+}
+public void errorReturnInPrologue(Statement stmt) {
+	String[] arguments = new String[] {stmt.toString()};
+	this.handle(
+		IProblem.DisallowedStatementInPrologue,
+		arguments,
+		arguments,
+		stmt.sourceStart,
+		stmt.sourceEnd);
+}
+public void implicitClassMissingMainMethod(TypeDeclaration typeDeclaration) {
+	this.handle(IProblem.ImplicitClassMissingMainMethod,
+			NoArgument,
+			NoArgument,
+			typeDeclaration.sourceStart,
+			typeDeclaration.sourceStart);
+}
+public void dimensionsIllegalOnRecordPattern(int sourceStart, int sourceEnd) {
+	this.handle(IProblem.DimensionsIllegalOnRecordPattern,
+			NoArgument,
+			NoArgument,
+			sourceStart,
+			sourceEnd);
+}
 public boolean scheduleProblemForContext(Runnable problemComputation) {
 	if (this.referenceContext != null) {
 		CompilationResult result = this.referenceContext.compilationResult();
@@ -12565,6 +12642,6 @@ public boolean scheduleProblemForContext(Runnable problemComputation) {
  * </ul></ul>
  */
 public void close() {
-	// Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
+	this.referenceContext = null;
 }
 }
