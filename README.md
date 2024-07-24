@@ -30,10 +30,10 @@ Modified source code in the `SONARJAVA-4921 Fix the referenceContext == null pro
 The source code of the Eclipse JDT project is available on GitHub:
 https://github.com/eclipse-jdt/eclipse.jdt.core
 
-Each 3 months, a new version of the Eclipse Platform is released, and JDT is part of it, but with a different versioning number for each artifacts.
+Each 3 months, a new version of the Eclipse Platform is released, and JDT is part of it, but with a different versioning number for each artifact.
 
 First we look at the `Latest Release` version of the Eclipse Platform on this page https://download.eclipse.org/eclipse/downloads/
-For example, in July 2024 is was the one month old `4.32`:
+For example, in July 2024 it was the one-month-old `4.32`:
 ```text
 Latest Release
 4.32 01 Jun 2024
@@ -42,7 +42,7 @@ Latest Release
 ```
 
 Then, if we want to know the versions of the JDT core artifacts that match Eclipse Platform 4.32, we look at the `R4_32` or `R4_32_maintenance` branch of the
-JDT core repository and we ignore the `-SNAPSHOT` suffix.
+JDT core repository, and we ignore the `-SNAPSHOT` suffix.
 
 For example on the `R4_32` branch of the `eclipse-jdt/eclipse.jdt.core` repository:
 
@@ -90,28 +90,25 @@ org.eclipse.jdt:org.eclipse.jdt.core:jar:3.38.0
 |  \- org.eclipse.platform:org.eclipse.compare.core:jar:3.8.500:compile
 \- org.eclipse.jdt:ecj:jar:3.38.0:compile
 ```
-Unfortunately, the `dependency:tree` plugin does not allow to exclude optional dependencies.
-As we can see, the `org.eclipse.team.core` dependency is marked `<optional>true</optional>` in the [org.eclipse.jdt.core-3.38.0.pom](https://repo1.maven.org/maven2/org/eclipse/jdt/org.eclipse.jdt.core/3.38.0/org.eclipse.jdt.core-3.38.0.pom) file. It require a manual validation by looking at all the pom files:
 
-* [org.eclipse.jdt:org.eclipse.jdt.core:jar:3.38.0](https://repo1.maven.org/maven2/org/eclipse/jdt/org.eclipse.jdt.core/3.38.0/org.eclipse.jdt.core-3.38.0.pom)
-  * [org.eclipse.platform:org.eclipse.core.resources:jar:3.20.200](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.resources/3.20.200/org.eclipse.core.resources-3.20.200.pom)
-    * [org.eclipse.platform:org.eclipse.core.expressions:jar:3.9.400](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.expressions/3.9.400/org.eclipse.core.expressions-3.9.400.pom)
-    * [org.eclipse.platform:org.eclipse.osgi:jar:3.20.0](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.osgi/3.20.0/org.eclipse.osgi-3.20.0.pom)
-  * [org.eclipse.platform:org.eclipse.core.runtime:jar:3.31.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.runtime/3.31.100/org.eclipse.core.runtime-3.31.100.pom)
-    * [org.eclipse.platform:org.eclipse.equinox.common:jar:3.19.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.equinox.common/3.19.100/org.eclipse.equinox.common-3.19.100.pom)
-    * [org.eclipse.platform:org.eclipse.core.jobs:jar:3.15.300](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.jobs/3.15.300/org.eclipse.core.jobs-3.15.300.pom)
-    * [org.eclipse.platform:org.eclipse.equinox.registry:jar:3.12.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.equinox.registry/3.12.100/org.eclipse.equinox.registry-3.12.100.pom)
-    * [org.eclipse.platform:org.eclipse.equinox.preferences:jar:3.11.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.equinox.preferences/3.11.100/org.eclipse.equinox.preferences-3.11.100.pom)
-      * [org.osgi:org.osgi.service.prefs:jar:1.1.2](https://repo1.maven.org/maven2/org/osgi/org.osgi.service.prefs/1.1.2/org.osgi.service.prefs-1.1.2.pom)
-        * [org.osgi:osgi.annotation:jar:8.0.1](https://repo1.maven.org/maven2/org/osgi/osgi.annotation/8.0.1/osgi.annotation-8.0.1.pom)
-    * [org.eclipse.platform:org.eclipse.core.contenttype:jar:3.9.400](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.contenttype/3.9.400/org.eclipse.core.contenttype-3.9.400.pom)
-      * [org.eclipse.platform:org.eclipse.equinox.app:jar:1.7.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.equinox.app/1.7.100/org.eclipse.equinox.app-1.7.100.pom)
-    * [org.eclipse.platform:org.eclipse.core.filesystem:jar:1.10.400](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.filesystem/1.10.400/org.eclipse.core.filesystem-1.10.400.pom)
-    * [org.eclipse.platform:org.eclipse.text:jar:3.14.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.text/3.14.100/org.eclipse.text-3.14.100.pom)
-      * [org.eclipse.platform:org.eclipse.core.commands:jar:3.12.100](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.core.commands/3.12.100/org.eclipse.core.commands-3.12.100.pom)
-    * [org.eclipse.platform:org.eclipse.team.core:jar:3.10.400](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.team.core/3.10.400/org.eclipse.team.core-3.10.400.pom)
-      * [org.eclipse.platform:org.eclipse.compare.core:jar:3.8.500](https://repo1.maven.org/maven2/org/eclipse/platform/org.eclipse.compare.core/3.8.500/org.eclipse.compare.core-3.8.500.pom)
-    * [org.eclipse.jdt:ecj:jar:3.38.0](https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.38.0/ecj-3.38.0.pom) 
+The `dependency:tree` plugin does not allow to exclude optional dependencies, but the `maven-shade-plugin` does not include them by default.
+For example, the `org.eclipse.team.core` dependency is marked `<optional>true</optional>` in the [org.eclipse.jdt.core-3.38.0.pom](https://repo1.maven.org/maven2/org/eclipse/jdt/org.eclipse.jdt.core/3.38.0/org.eclipse.jdt.core-3.38.0.pom) file. So `org.eclipse.team.core` is not included in the shaded jar.
+
+When changing the `pom.xml` dependencies, we should keep in mind to compare the new content of the shaded jar with the previous one to ensure that
+the dependencies are correctly included or excluded. At each state of the `pom.xml` file modification, we can generate a text description of its content using the following command:
+
+```bash
+(
+  CURRENT_DATE="$(date +"%Y.%m.%d-%Hh%Mm%Ss")" && \
+  mvn clean package && \
+    mkdir target/jdt-package-jar-content && \
+    cd    target/jdt-package-jar-content && \
+    jar xf ../jdt-package-*-SNAPSHOT.jar && \
+    find . -type f | sort                   > "../../jdt-package-jar-${CURRENT_DATE}-content.txt" && \
+    find . -type f | sort | xargs sha256sum > "../../jdt-package-jar-${CURRENT_DATE}-content-hash.txt" && \
+    cd ../..
+)
+```
 
 ## License
 
