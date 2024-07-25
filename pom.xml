@@ -19,10 +19,6 @@
   </organization>
 
   <properties>
-    <!-- Temporary workaround to force inclusion of pom.xml because of https://sonarsource.atlassian.net/browse/MSONAR-218 -->
-    <sonar.sources>.</sonar.sources>
-    <sonar.inclusions>pom.xml</sonar.inclusions>
-
     <!--
      This project contains some code from https://github.com/eclipse-jdt/eclipse.jdt.core with some minor changes.
      It does not match our code quality standard and can not be analyzed like other code in this repository.
