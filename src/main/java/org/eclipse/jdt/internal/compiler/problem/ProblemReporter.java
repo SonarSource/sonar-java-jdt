@@ -913,6 +913,16 @@ public void abortDueToPreviewEnablingNotAllowed(String sourceLevel, String expec
 			0,
 			0);
 }
+public void abortDueToNotSupportedJavaVersion(String notSupportedVersion, String firstSupportedVersion) {
+	String[] args = new String[] {notSupportedVersion, firstSupportedVersion};
+	this.handle(
+			IProblem.JavaVersionNotSupported,
+			args,
+			args,
+			ProblemSeverities.Error | ProblemSeverities.Abort | ProblemSeverities.Fatal,
+			0,
+			0);
+}
 public void abstractMethodCannotBeOverridden(SourceTypeBinding type, MethodBinding concreteMethod) {
 
 	this.handle(
@@ -4163,6 +4173,10 @@ public void invalidConstructor(Statement statement, MethodBinding targetConstruc
 			problemConstructor = (ProblemMethodBinding) targetConstructor;
 			contradictoryNullAnnotationsInferred(problemConstructor.closestMatch, statement);
 			return;
+		case ProblemReasons.MissingTypeInSignature:
+			problemConstructor = (ProblemMethodBinding) targetConstructor;
+			missingTypeInConstructor(statement, problemConstructor.closestMatch);
+			return;
 		case ProblemReasons.NoError : // 0
 		default :
 			needImplementation(statement); // want to fail to see why we were here...
@@ -4783,6 +4797,10 @@ public void invalidMethod(MessageSend messageSend, MethodBinding method, Scope s
 		case ProblemReasons.ContradictoryNullAnnotations:
 			problemMethod = (ProblemMethodBinding) method;
 			contradictoryNullAnnotationsInferred(problemMethod.closestMatch, messageSend);
+			return;
+		case ProblemReasons.MissingTypeInSignature:
+			problemMethod = (ProblemMethodBinding) method;
+			missingTypeInMethod(messageSend, problemMethod.closestMatch);
 			return;
 		case ProblemReasons.NoError : // 0
 		default :
@@ -6942,7 +6960,7 @@ public void missingSynchronizedOnInheritedMethod(MethodBinding currentMethod, Me
 			currentMethod.sourceEnd());
 }
 public void missingTypeInConstructor(ASTNode location, MethodBinding constructor) {
-	List<TypeBinding> missingTypes = constructor.collectMissingTypes(null);
+	List<TypeBinding> missingTypes = constructor.collectMissingTypes(null, true);
 	if (missingTypes == null) {
 		System.err.println("The constructor " + constructor + " is wrongly tagged as containing missing types"); //$NON-NLS-1$ //$NON-NLS-2$
 		return;
@@ -6975,7 +6993,7 @@ public void missingTypeInConstructor(ASTNode location, MethodBinding constructor
 public void missingTypeInLambda(LambdaExpression lambda, MethodBinding method) {
 	int nameSourceStart = lambda.sourceStart();
 	int nameSourceEnd = lambda.diagnosticsSourceEnd();
-	List<TypeBinding> missingTypes = method.collectMissingTypes(null);
+	List<TypeBinding> missingTypes = method.collectMissingTypes(null, true);
 	if (missingTypes == null) {
 		System.err.println("The lambda expression " + method + " is wrongly tagged as containing missing types"); //$NON-NLS-1$ //$NON-NLS-2$
 		return;
@@ -7002,7 +7020,7 @@ public void missingTypeInMethod(ASTNode astNode, MethodBinding method) {
 		nameSourceStart = astNode.sourceStart;
 		nameSourceEnd = astNode.sourceEnd;
 	}
-	List<TypeBinding> missingTypes = method.collectMissingTypes(null);
+	List<TypeBinding> missingTypes = method.collectMissingTypes(null, true);
 	if (missingTypes == null) {
 		System.err.println("The method " + method + " is wrongly tagged as containing missing types"); //$NON-NLS-1$ //$NON-NLS-2$
 		return;
@@ -11590,6 +11608,11 @@ public void invalidModule(ModuleReference ref) {
 	String[] args = new String[] { CharOperation.charToString(ref.moduleName) };
 	this.handle(IProblem.UndefinedModule, args, args, ref.sourceStart, ref.sourceEnd);
 }
+public void moduleNotFound(CompilationUnitDeclaration compilationUnitDeclaration, char[] moduleName) {
+	String[] args = new String[] { String.valueOf(moduleName) };
+	ASTNode location = (compilationUnitDeclaration.currentPackage != null) ? compilationUnitDeclaration.currentPackage : compilationUnitDeclaration;
+	handle(IProblem.UndefinedModule, args, args, location.sourceStart, location.sourceEnd);
+}
 public void missingModuleAddReads(char[] requiredModuleName) {
 	String[] args = new String[] { new String(requiredModuleName) };
 	this.handle(IProblem.UndefinedModuleAddReads, args, args, 0, 0);
@@ -12642,6 +12665,6 @@ public boolean scheduleProblemForContext(Runnable problemComputation) {
  * </ul></ul>
  */
 public void close() {
-  // Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
+	this.referenceContext = null;
 }
 }
