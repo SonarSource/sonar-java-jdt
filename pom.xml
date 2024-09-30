@@ -57,8 +57,7 @@
       <dependency>
         <groupId>org.eclipse.jdt</groupId>
         <artifactId>org.eclipse.jdt.core</artifactId>
-        <!-- see jdt/README.md before changing this version to also backport the new source code into the files of jdt/src/main/java -->
-        <version>3.38.0</version>
+        <version>3.39.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.eclipse.platform</groupId>
@@ -76,33 +75,10 @@
             <groupId>org.eclipse.platform</groupId>
             <artifactId>org.eclipse.equinox.app</artifactId>
           </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.platform</groupId>
-        <artifactId>org.eclipse.core.resources</artifactId>
-        <version>3.20.100</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.platform</groupId>
-        <artifactId>org.eclipse.core.runtime</artifactId>
-        <version>3.31.0</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.platform</groupId>
-        <artifactId>org.eclipse.core.jobs</artifactId>
-        <version>3.15.200</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.platform</groupId>
-        <artifactId>org.eclipse.core.contenttype</artifactId>
-        <version>3.9.300</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.platform</groupId>
-        <artifactId>org.eclipse.text</artifactId>
-        <version>3.14.0</version>
-        <exclusions>
+          <exclusion>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.eclipse.platform</groupId>
             <artifactId>org.eclipse.core.commands</artifactId>
@@ -132,8 +108,16 @@
             <configuration>
               <createSourcesJar>true</createSourcesJar>
               <shadeSourcesContent>true</shadeSourcesContent>
-              <shadedArtifactAttached>false</shadedArtifactAttached>
               <filters>
+                <filter>
+                  <artifact>org.eclipse.jdt:*</artifact>
+                  <excludes>
+                    <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemHandler.class</exclude>
+                    <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java</exclude>
+                    <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemReporter.class</exclude>
+                    <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java</exclude>
+                  </excludes>
+                </filter>
                 <filter>
                   <artifact>*:*</artifact>
                   <excludes>
