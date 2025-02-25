@@ -28,3 +28,9 @@ cd build-eclipse-jdt-core-branch
 ```bash
 mvn clean package exec:java -Dexec.args="BETA_JAVA24"
 ```
+
+### Run one JDT unit test
+```bash
+cd workdir/eclipse.jdt.core/org.eclipse.jdt.core.tests.compiler
+mvn verify "-Dtest=org.eclipse.jdt.core.tests.compiler.regression.ConditionalExpressionTest" -Dtycho.surefire.argLine="-Dcompliance=21" --batch-mode
+```
