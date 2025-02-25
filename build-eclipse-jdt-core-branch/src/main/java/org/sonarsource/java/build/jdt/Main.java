@@ -69,10 +69,18 @@ public class Main {
     replaceSonarJavaJdtDependencies(projectDir.getParent(), dependencies, eclipseSettings);
     rebuildSonarJavaJdt(projectDir.getParent());
   }
+  
+  public static String mvnCommand() {
+    return isWindows() ? "mvn.cmd" : "mvn";
+  }
 
+  private static boolean isWindows() {
+    return System.getProperty("os.name").toLowerCase().contains("win");
+  }
+  
   private static void rebuildSonarJavaJdt(Path sonarJavaJdtPath) throws IOException, InterruptedException {
     System.out.println("Rebuild sonar-java-jdt");
-    exec(sonarJavaJdtPath, "mvn",
+    exec(sonarJavaJdtPath, mvnCommand(),
       // we want a fresh build
       "clean",
       // we want to install the artifacts in the maven local repository
@@ -245,7 +253,7 @@ public class Main {
 
   private static JsonObject dependencyTree(Artifact artifact, String excludes, Path eclipseSettings) throws IOException, InterruptedException {
     Path outputFile = artifact.directory().resolve("dependency-tree.json");
-    exec(artifact.directory(), "mvn",
+    exec(artifact.directory(), mvnCommand(),
       "--batch-mode",
       "--settings", eclipseSettings.toString(),
       "--file", artifact.pom().toString(),
@@ -292,7 +300,7 @@ public class Main {
 
   private static void buildJdtCore(Path jdtDir) throws IOException, InterruptedException {
     System.out.println("Build " + jdtDir);
-    exec(jdtDir, "mvn",
+    exec(jdtDir, mvnCommand(),
       // we want a fresh build
       "clean",
       // we want to install the artifacts in the maven local repository
@@ -365,7 +373,7 @@ public class Main {
         System.getProperty("user.home"),
         ".m2",
         "repository",
-        groupId.replace('.', '/'),
+        groupId.replace('.', File.separatorChar),
         artifactId,
         version);
     }
