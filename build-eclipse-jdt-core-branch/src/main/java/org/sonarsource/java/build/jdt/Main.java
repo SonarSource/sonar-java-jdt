@@ -269,9 +269,12 @@ public class Main {
     }
     Path java = Path.of(javaHome, "bin", "java");
     if (!Files.exists(java)) {
-      throw new IllegalStateException("JAVA_HOME does not point to a valid JDK");
+      java = Path.of(javaHome, "bin", "java.exe");
+      if (!Files.exists(java)) {
+        throw new IllegalStateException("JAVA_HOME does not point to a valid JDK");
+      }
     }
-    var out = exec("java",
+    var out = exec(java.toString(),
       // we want a fresh build
       "--version")
       .throwIfFailed("Failed to execute java --version");
