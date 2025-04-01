@@ -265,7 +265,9 @@ public class ASTParser {
 		} catch (IllegalArgumentException e) {
 			throw new IllegalStateException("invalid environment settings", e); //$NON-NLS-1$
 		}
-		if ((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0) {
+		// Do not call checkForSystemLibrary when project is null, because the logic does not work when Java >= 9 and
+		// there is not "java.base" module in "allClasspaths". In the Java analyzer, project is always null.
+		if (this.project != null && (this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0) {
 			checkForSystemLibrary(allClasspaths);
 		}
 		return allClasspaths;
