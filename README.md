@@ -17,6 +17,19 @@ To update ECJ (Eclipse Compiler for Java), you usually need the `eclipse.jdt.cor
 
 Don't forget to update `overrideECJ.sh` if you change how you override `ECJ` files.
 
+### org.eclipse.jdt:org.eclipse.jdt.core 3.41.0
+
+In order to update `org.eclipse.jdt.core` to 3.41.0, the following files have been downloaded and patched to fix the `referenceContext == null` problem
+and the `Missing system library` problem in `ASTParser.getClasspath(...)`   
+
+```bash
+curl -sSLf -o - https://raw.githubusercontent.com/eclipse-jdt/eclipse.jdt.core/R4_35/org.eclipse.jdt.core.compiler.batch/src/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java > src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java
+
+curl -sSLf -o - https://raw.githubusercontent.com/eclipse-jdt/eclipse.jdt.core/R4_35/org.eclipse.jdt.core.compiler.batch/src/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java > src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
+
+curl -sSLf -o - https://raw.githubusercontent.com/eclipse-jdt/eclipse.jdt.core/R4_35/org.eclipse.jdt.core/dom/org/eclipse/jdt/core/dom/ASTParser.java > src/main/java/org/eclipse/jdt/core/dom/ASTParser.java
+```
+
 ### org.eclipse.jdt:org.eclipse.jdt.core 3.39.0
 
 In order to update `org.eclipse.jdt.core` to 3.39.0, the following files have been downloaded and patched to fix the `referenceContext == null problem`:
