@@ -1,5 +1,16 @@
 # Packaging of Eclipse's Java Development Tools for SonarJava
 
+
+## Finding the `eclipse.jdt.core` Release Tag
+
+The Eclipse IDE follows a quarterly release schedule (typically March, June, September, December). You can find the release history on [wikipedia](https://en.wikipedia.org/wiki/Eclipse_(software)).
+
+To update ECJ (Eclipse Compiler for Java), you usually need the `eclipse.jdt.core` tag corresponding to the latest stable Eclipse IDE release.
+
+1.  **Identify the Version:** Determine the version number of the target Eclipse IDE release (e.g., `4.31` for the 2024-03 release) using the link above.
+2.  **Construct the Tag:** These tags follow the pattern `R<majorVersion>_<minorVersion>`. For example, Eclipse version `4.31` corresponds to the tag `R4_31`.
+3.  **Verify the Tag:** Confirm that this exact tag exists in the `eclipse.jdt.core` repository. You can check the available tags directly [here](https://github.com/eclipse-jdt/eclipse.jdt.core).
+
 ## Modifications
 
 ### org.eclipse.jdt:org.eclipse.jdt.core 3.39.0
