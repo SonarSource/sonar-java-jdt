@@ -10,6 +10,7 @@ function overrideECJ() {
   module_and_file_path_to_override=(
    "org.eclipse.jdt.core.compiler.batch/src:org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java"
    "org.eclipse.jdt.core.compiler.batch/src:org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java"
+   "org.eclipse.jdt.core/dom:org/eclipse/jdt/core/dom/ASTParser.java"
   )
 
   for entry in "${module_and_file_path_to_override[@]}"; do
