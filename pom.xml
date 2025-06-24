@@ -13,6 +13,9 @@
   <artifactId>jdt-package</artifactId>
   <version>1.5-SNAPSHOT</version>
 
+  <name>Eclipse JDT Core Package</name>
+  <description>Packaging of Eclipse JDT Core for SonarQube Java Analyzer</description>
+
   <organization>
     <name>SonarSource</name>
     <url>http://www.sonarsource.com</url>
@@ -51,6 +54,15 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+
+  <developers>
+    <developer>
+      <id>sonarsource-team</id>
+      <name>SonarSource Team</name>
+      <organization>SonarSource</organization>
+      <organizationUrl>https://www.sonarsource.com/</organizationUrl>
+    </developer>
+  </developers>
 
   <dependencyManagement>
     <dependencies>
