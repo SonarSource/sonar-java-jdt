@@ -15,4 +15,4 @@ jobs:
     uses: SonarSource/gh-action_release/.github/workflows/main.yaml@v5
     with:
       mavenCentralSync: true
-      slackChannel: team-lang-java-notifs
+      slackChannel: squad-jvm-notifs
