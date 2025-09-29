@@ -1,5 +1,7 @@
 # Packaging of Eclipse's Java Development Tools for SonarJava
 
+[![Build](https://github.com/SonarSource/sonar-java-jdt/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/SonarSource/sonar-java-jdt/actions/workflows/build.yml)
+
 This repository exists because we need to patch some files from eclipse JDT to fix some issues, but we can only do this in a repository with the same license as Eclipse.
 When a new version of JDT is released, we need to update it in `sonar-java-jdt` and reapply the patch.
 
