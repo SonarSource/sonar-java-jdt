@@ -43,8 +43,8 @@
   </scm>
 
   <ciManagement>
-    <system>Cirrus CI</system>
-    <url>https://cirrus-ci.com/github/SonarSource/sonar-java-jdt</url>
+    <system>GitHub Actions</system>
+    <url>https://github.com/SonarSource/sonar-java-jdt/actions</url>
   </ciManagement>
 
   <licenses>
