@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: sonar-xs
+    runs-on: github-ubuntu-latest-s
     name: Build and run shadow scans
     permissions:
       id-token: write
