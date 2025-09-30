@@ -1,0 +1,33 @@
+name: Unified Dogfooding scans
+on:
+  schedule:
+    # Run nightly at 2 AM UTC (same as Cirrus CI nightly cron)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: sonar-xs
+    name: Build and run shadow scans
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
+      - uses: SonarSource/ci-github-actions/build-maven@master # dogfood
+        with:
+          run-shadow-scans: true
+          working-directory: private
+
+      - name: Run IRIS Analysis
+        uses: SonarSource/unified-dogfooding-actions/run-iris@v1
+        with:
+          primary_project_key: "SonarSource_sonar-java-jdt"
+          primary_platform: "SQC-EU"
+          shadow1_project_key: "SonarSource_sonar-java-jdt"
+          shadow1_platform: "Next"
+          shadow2_project_key: "SonarSource_sonar-java-jdt"
+          shadow2_platform: "SQC-US"
