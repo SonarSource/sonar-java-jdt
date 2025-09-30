@@ -20,6 +20,8 @@ jobs:
           version: 2025.7.12
       - uses: SonarSource/ci-github-actions/build-maven@v1
         with:
+          artifactory-reader-role: private-reader    # Override default public-reader
+          artifactory-deployer-role: qa-deployer     # Override default public-deployer
           run-shadow-scans: true
           working-directory: private
 
