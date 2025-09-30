@@ -5,6 +5,9 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
   pull_request:
+  push:
+    branches:
+      - tt/gha-shadow-scan
 
 jobs:
   build:
@@ -23,7 +26,6 @@ jobs:
           artifactory-reader-role: private-reader    # Override default public-reader
           artifactory-deployer-role: qa-deployer     # Override default public-deployer
           run-shadow-scans: true
-          working-directory: private
 
       - name: Run IRIS Analysis
         uses: SonarSource/unified-dogfooding-actions/run-iris@v1
