@@ -26,7 +26,7 @@ jobs:
           artifactory-reader-role: private-reader    # Override default public-reader
           artifactory-deployer-role: qa-deployer     # Override default public-deployer
           run-shadow-scans: true
-          maven-opts: "-Dsonar.organization=sonarsource -Dsonar.projectKey=SonarSource_sonar-java-jdt"
+          maven-opts: -Dsonar.organization=sonarsource -Dsonar.projectKey=SonarSource_sonar-java-jdt
 
       - name: Run IRIS Analysis
         uses: SonarSource/unified-dogfooding-actions/run-iris@v1
