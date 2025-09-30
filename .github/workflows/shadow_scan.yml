@@ -4,6 +4,7 @@ on:
     # Run nightly at 2 AM UTC (same as Cirrus CI nightly cron)
     - cron: '0 2 * * *'
   workflow_dispatch:
+  pull_request:
 
 jobs:
   build:
