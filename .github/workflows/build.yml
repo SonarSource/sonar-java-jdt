@@ -31,6 +31,8 @@ jobs:
           deploy-pull-request: true
           artifactory-reader-role: private-reader    # Override default public-reader
           artifactory-deployer-role: qa-deployer     # Override default public-deployer
+        env:
+          MAVEN_OPTS: -XX:-UseContainerSupport -Xmx1536m -Xms128m
 
   promote:
     needs: [build]
