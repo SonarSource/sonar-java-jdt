@@ -33,7 +33,7 @@
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
     <maven.source.skip>true</maven.source.skip>
-
+    <version.mycila.license.plugin>5.0.0</version.mycila.license.plugin>
   </properties>
 
   <scm>
