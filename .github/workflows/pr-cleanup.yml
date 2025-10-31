@@ -1,4 +1,4 @@
-name: Cleanup caches and artifacts on PR close
+name: Cleanup PR Resources
 on:
   pull_request:
     types:
