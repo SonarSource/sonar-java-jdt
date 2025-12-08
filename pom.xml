@@ -11,7 +11,7 @@
 
   <groupId>org.sonarsource.java</groupId>
   <artifactId>jdt-package</artifactId>
-  <version>1.7.1-SNAPSHOT</version>
+  <version>1.7.2-SNAPSHOT</version>
 
   <name>Eclipse JDT Core Package</name>
   <description>Packaging of Eclipse JDT Core for SonarQube Java Analyzer</description>
