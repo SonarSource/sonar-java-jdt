@@ -265,9 +265,7 @@ public class ASTParser {
 		} catch (IllegalArgumentException e) {
 			throw new IllegalStateException("invalid environment settings", e); //$NON-NLS-1$
 		}
-		// Do not call checkForSystemLibrary when project is null, because the logic does not work when Java >= 9 and
-		// there is not "java.base" module in "allClasspaths". In the Java analyzer, project is always null.
-		if (this.project != null && (this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0) {
+		if ((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0) {
 			checkForSystemLibrary(allClasspaths);
 		}
 		return allClasspaths;
@@ -485,6 +483,21 @@ public class ASTParser {
 			this.bits |= CompilationUnitResolver.RESOLVE_BINDING;
 		} else {
 			this.bits &= ~CompilationUnitResolver.RESOLVE_BINDING;
+		}
+	}
+
+	/**
+	 * Requests for the compiler to force problem detection (such as extra analysis
+	 * or linting configured in project).
+	 * @param enabled <code>true</code> if problems are wanted, and <code>false</code>
+	 *                if problems are not of interest.
+	 * @since 3.44
+	 */
+	public void setForceProblemDetection(boolean enabled) {
+		if (enabled) {
+			this.bits |= CompilationUnitResolver.FORCE_PROBLEM_DETECTION;
+		} else {
+			this.bits &= ~CompilationUnitResolver.FORCE_PROBLEM_DETECTION;
 		}
 	}
 
