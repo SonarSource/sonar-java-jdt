@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
-          version: 2025.7.12
+          version: 2026.4.20
       - uses: SonarSource/ci-github-actions/build-maven@v1
         with:
           artifactory-reader-role: private-reader    # Override default public-reader
