@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [ "github>SonarSource/renovate-config:quality-jvm-squad" ],
+  packageRules: [
+    {
+      // Manual update.
+      matchPackageNames: [ "org.eclipse.jdt:org.eclipse.jdt.core" ],
+      enabled: false
+    },
+    {
+      // Update quarterly to reduce number of PRs.
+      matchPaths: [ "build-eclipse-jdt-core-branch/**"],
+      extends: [ "schedule:quarterly" ]
+    },
+  ],
+}
