@@ -5,7 +5,13 @@
     {
       // Manual update.
       matchPackageNames: [ "org.eclipse.jdt:org.eclipse.jdt.core" ],
-      enabled: false
+      enabled: false,
+    },
+    {
+      "description": "Use semver range updates (not pinning) for SonarSource GitHub Actions",
+      "matchManagers": [ "github-actions" ],
+      "matchPackagePatterns": [ "^SonarSource/" ],
+      "rangeStrategy": "replace"
     },
     {
       // Update quarterly to reduce number of PRs.
