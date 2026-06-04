@@ -8,6 +8,12 @@
       enabled: false
     },
     {
+      // Use semver range updates (not pinning) for SonarSource GitHub Actions 
+      matchManagers: [ "github-actions" ],
+      matchPackagePatterns: [ "^SonarSource/" ],
+      rangeStrategy: "replace"
+    },
+    {
       // Update quarterly to reduce number of PRs.
       matchPaths: [ "build-eclipse-jdt-core-branch/**"],
       extends: [ "schedule:quarterly" ]
