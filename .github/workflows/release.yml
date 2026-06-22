@@ -16,5 +16,6 @@ jobs:
       contents: write
     uses: SonarSource/gh-action_release/.github/workflows/main.yaml@v7
     with:
+      version: ${{ inputs.version }}
       mavenCentralSync: true
       slackChannel: squad-jvm-notifs
