@@ -49,6 +49,17 @@ Once we validated that the new version of `sonar-java-jdt` works with `sonar-jav
 
 This sections lists the modifications that are contained in the patches and were made to the JDT core files in order to fix some issues that SonarJava has with the JDT core.
 
+### org.eclipse.jdt:org.eclipse.jdt.core 3.46.0
+
+In order to update `org.eclipse.jdt.core` to 3.46.0, the following files have been downloaded and patched to fix the `(...) is wrongly tagged as containing missing types` in sanity tests and the `Missing system library` problem in `ASTParser.getClasspath(...)`.
+`ProblemHandler.java` was unchanged upstream between R4_38 and R4_40, so it did not need to be re-fetched.
+
+```bash
+curl -sSLf -o - https://raw.githubusercontent.com/eclipse-jdt/eclipse.jdt.core/R4_40/org.eclipse.jdt.core.compiler.batch/src/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java > src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
+
+curl -sSLf -o - https://raw.githubusercontent.com/eclipse-jdt/eclipse.jdt.core/R4_40/org.eclipse.jdt.core/dom/org/eclipse/jdt/core/dom/ASTParser.java > src/main/java/org/eclipse/jdt/core/dom/ASTParser.java
+```
+
 ### org.eclipse.jdt:org.eclipse.jdt.core 3.41.0
 
 In order to update `org.eclipse.jdt.core` to 3.41.0, the following files have been downloaded and patched to fix the `referenceContext == null` problem
