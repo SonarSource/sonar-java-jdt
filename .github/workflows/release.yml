@@ -18,4 +18,4 @@ jobs:
     with:
       version: ${{ inputs.version }}
       mavenCentralSync: true
-      slackChannel: squad-jvm-notifs
+      slackChannel: squad-corelang-releases
