@@ -1,6 +1,23 @@
-# Packaging of Eclipse's Java Development Tools for SonarJava
+<!-- Sonar Marketing hosts these approved brand assets on its Kentico Kontent CDN (assets-eu-01.kc-usercontent.com). Shared URLs are intentional; consult Marketing before replacing them. -->
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets-eu-01.kc-usercontent.com/ef593040-b591-0198-9506-ed88b30bc023/a23fc7ba-23f0-489a-829d-ed88c0748521/Sonar_Logo_Dark%20Backgrounds.svg">
+    <img src="https://assets-eu-01.kc-usercontent.com/ef593040-b591-0198-9506-ed88b30bc023/82c13eba-d95c-4bb8-8007-7ce77c14e043/Sonar_Logo_Light%20Backgrounds.svg" alt="Sonar logo" width="400">
+  </picture>
+</p>
 
 [![Build](https://github.com/SonarSource/sonar-java-jdt/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/SonarSource/sonar-java-jdt/actions/workflows/build.yml)
+
+<!-- sonar-marketing:start -->
+<!-- Marketing maintains this section. For wording changes, consult the relevant Product Marketing Manager (PMM). Repository CODEOWNERS review accuracy and merge changes. -->
+
+# Packaging Eclipse's Java Development Tools for SonarJava
+
+This repository packages Eclipse's Java Development Tools (JDT) for SonarJava, including patches needed by the Java analyzer. The maintenance instructions below explain how to update JDT and test the resulting package with SonarJava.
+
+To learn more about Sonar’s Java analysis, visit the [Sonar website](https://www.sonarsource.com/knowledge/languages/java/).
+
+<!-- sonar-marketing:end -->
 
 This repository exists because we need to patch some files from eclipse JDT to fix some issues, but we can only do this in a repository with the same license as Eclipse.
 When a new version of JDT is released, we need to update it in `sonar-java-jdt` and reapply the patch.
