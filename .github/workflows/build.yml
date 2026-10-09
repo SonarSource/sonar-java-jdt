@@ -29,13 +29,6 @@ jobs:
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.0
-      # Build-number refs only track a number; use the existing base commit so
-      # claiming a PR number does not create refs containing workflow changes.
-      - name: Claim PR build number
-        if: github.event_name == 'pull_request'
-        uses: SonarSource/ci-github-actions/get-build-number@v2
-        env:
-          GITHUB_SHA: ${{ github.event.pull_request.base.sha }}
       - uses: SonarSource/ci-github-actions/build-maven@v2
         id: build-step
         with:
