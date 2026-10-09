@@ -100,6 +100,7 @@ jobs:
     name: Notify build failure
     needs:
       - build
+      - analysis
       - promote
     if: >-
       always()
