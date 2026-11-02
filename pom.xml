@@ -29,6 +29,8 @@
     <sonar.exclusions>src/main/java/org/eclipse/jdt/**</sonar.exclusions>
 
     <jdk.min.version>21</jdk.min.version>
+    <version.junit.jupiter>5.11.3</version.junit.jupiter>
+    <version.assertj>3.27.7</version.assertj>
     <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
@@ -105,6 +107,18 @@
       <groupId>org.eclipse.jdt</groupId>
       <artifactId>org.eclipse.jdt.core</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${version.junit.jupiter}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${version.assertj}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -138,6 +152,28 @@
                 </filter>
               </filters>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+      Integration tests run against the shaded jar, built during the package phase. The signed jars of Eclipse, which are
+      bundled into it, are removed from their classpath: mixing them with the classes of this project, which are not signed,
+      causes a java.lang.SecurityException ("signer information does not match signer information of other classes in the
+      same package"), and it is the shaded jar that is published.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <classpathDependencyScopeExclude>compile</classpathDependencyScopeExclude>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
