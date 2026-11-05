@@ -93,6 +93,7 @@ import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.compiler.InvalidInputException;
 import org.eclipse.jdt.internal.compiler.CompilationResult;
+import org.eclipse.jdt.internal.compiler.DefaultErrorHandlingPolicies;
 import org.eclipse.jdt.internal.compiler.IErrorHandlingPolicy;
 import org.eclipse.jdt.internal.compiler.IProblemFactory;
 import org.eclipse.jdt.internal.compiler.ast.*;
@@ -3363,8 +3364,27 @@ public void importProblem(ImportReference importRef, Binding expectedImport) {
 			case ProblemReasons.NotVisible :
 			case ProblemReasons.NotAccessible :
 				id = (expectedImport.problemId() == ProblemReasons.NotVisible) ? IProblem.NotVisibleField : IProblem.NotAccessibleField;
-				readableArguments = new String[] {CharOperation.toString(importRef.tokens), new String(field.declaringClass.readableName())};
-				shortArguments = new String[] {CharOperation.toString(importRef.tokens), new String(field.declaringClass.shortReadableName())};
+				if (importRef.isStatic() && field.declaringClass != null) {
+					// messages.properties uses:
+					// 71 = The field {1}.{0} is not visible
+					readableArguments = new String[] {
+							new String(field.name), // {0}
+							new String(field.declaringClass.readableName()) // {1}
+					};
+					shortArguments = new String[] {
+							new String(field.name), // {0}
+							new String(field.declaringClass.shortReadableName()) // {1}
+					};
+				} else {
+					readableArguments = new String[] {
+							CharOperation.toString(importRef.tokens),
+							new String(field.declaringClass.readableName())
+					};
+					shortArguments = new String[] {
+							CharOperation.toString(importRef.tokens),
+							new String(field.declaringClass.shortReadableName())
+					};
+				}
 				break;
 			case ProblemReasons.Ambiguous :
 				id = IProblem.AmbiguousField;
@@ -5044,6 +5064,7 @@ private boolean isRecoveredName(char[][] qualifiedName) {
 	}
 	return false;
 }
+
 
 public void javadocAmbiguousMethodReference(int sourceStart, int sourceEnd, Binding fieldBinding, int modifiers) {
 	int severity = computeSeverity(IProblem.JavadocAmbiguousMethodReference);
@@ -6814,9 +6835,7 @@ public void missingTypeInMethod(ASTNode astNode, MethodBinding method) {
 		missingType = problem.missingType;
 		problemId = IProblem.MissingTypeForInference;
 	} else {
-		// Disabled to fix failing sonar-java sanity test faling due to
-		// "wrongly tagged as containing missing types".
-		// assert false : "The method " + method + " is wrongly tagged as containing missing types"; //$NON-NLS-1$ //$NON-NLS-2$
+		assert false : "The method " + method + " is wrongly tagged as containing missing types"; //$NON-NLS-1$ //$NON-NLS-2$
 		return;
 	}
 	if (method instanceof ProblemMethodBinding problem) {
@@ -9562,31 +9581,38 @@ public void previewFeatureUsed(int sourceStart, int sourceEnd) {
 public void previewAPIUsed(Scope scope, int sourceStart, int sourceEnd, IBinaryAnnotation previewAnnotation) {
 	String featureName = null; // FIXME: do we need a default string to use if the name is not found below?
 	boolean isReflective = false;
-	for (IBinaryElementValuePair valuePair : previewAnnotation.getElementValuePairs()) {
-		if (valuePair.getValue() instanceof EnumConstantSignature enumSig) {
-			// extract the feature title from the enum constant:
-			char[] typeName = enumSig.getTypeName();
-			ReferenceBinding enumType = scope.environment().getTypeFromConstantPoolName(typeName, 1, typeName.length-1, false, null);
-			if (enumType.isUnresolvedType())
-				enumType = (ReferenceBinding) BinaryTypeBinding.resolveType(enumType, scope.environment(), false);
-			FieldBinding field = enumType.getField(enumSig.getEnumConstantName(), true);
-			for (AnnotationBinding annotationBinding : field.getAnnotations()) {
-				if (CharOperation.equals(annotationBinding.getAnnotationType().constantPoolName(),
-						ConstantPool.PREVIEW_FEATURE_JEP, 1, ConstantPool.PREVIEW_FEATURE_JEP.length-1)) { // skip 'L' and ';'
-					for (ElementValuePair elementValuePair : annotationBinding.getElementValuePairs()) {
-						if (CharOperation.equals(ConstantPool.TITLE, elementValuePair.getName())
-								&& elementValuePair.value instanceof StringConstant constant) {
-							featureName = constant.stringValue();
-							break;
+	IErrorHandlingPolicy oldPolicy = scope.problemReporter().switchErrorHandlingPolicy(DefaultErrorHandlingPolicies.ignoreAllProblems());
+	try {
+		for (IBinaryElementValuePair valuePair : previewAnnotation.getElementValuePairs()) {
+			if (valuePair.getValue() instanceof EnumConstantSignature enumSig) {
+				// extract the feature title from the enum constant:
+				char[] typeName = enumSig.getTypeName();
+				ReferenceBinding enumType = scope.environment().getTypeFromConstantPoolName(typeName, 1, typeName.length-1, false, null);
+				if (enumType.isUnresolvedType())
+					enumType = (ReferenceBinding) BinaryTypeBinding.resolveType(enumType, scope.environment(), false);
+				FieldBinding field = enumType.getField(enumSig.getEnumConstantName(), true);
+				if (field == null)
+					continue;
+				for (AnnotationBinding annotationBinding : field.getAnnotations()) {
+					if (CharOperation.equals(annotationBinding.getAnnotationType().constantPoolName(),
+							ConstantPool.PREVIEW_FEATURE_JEP, 1, ConstantPool.PREVIEW_FEATURE_JEP.length-1)) { // skip 'L' and ';'
+						for (ElementValuePair elementValuePair : annotationBinding.getElementValuePairs()) {
+							if (CharOperation.equals(ConstantPool.TITLE, elementValuePair.getName())
+									&& elementValuePair.value instanceof StringConstant constant) {
+								featureName = constant.stringValue();
+								break;
+							}
 						}
 					}
 				}
+			} else
+				if (CharOperation.equals(valuePair.getName(), ConstantPool.REFLECTIVE)) {
+					if (valuePair.getValue() instanceof BooleanConstant bool)
+						isReflective = bool.booleanValue();
 			}
-		} else
-			if (CharOperation.equals(valuePair.getName(), ConstantPool.REFLECTIVE)) {
-				if (valuePair.getValue() instanceof BooleanConstant bool)
-					isReflective = bool.booleanValue();
 		}
+	} finally {
+		scope.problemReporter().switchErrorHandlingPolicy(oldPolicy);
 	}
 
 	int problemId = -1;
@@ -9594,7 +9620,6 @@ public void previewAPIUsed(Scope scope, int sourceStart, int sourceEnd, IBinaryA
 	if (!this.options.enablePreviewFeatures) {
 		if (this.options.complianceLevel < ClassFileConstants.getLatestJDKLevel()) {
 			problemId = IProblem.PreviewAPIUsed;
-			severity = ProblemSeverities.Warning;
 		} else {
 			problemId = IProblem.PreviewAPIDisabled;
 			severity = isReflective ? ProblemSeverities.Warning : ProblemSeverities.Error;
@@ -9602,11 +9627,12 @@ public void previewAPIUsed(Scope scope, int sourceStart, int sourceEnd, IBinaryA
 	} else {
 		this.referenceContext.compilationResult().usesPreview = true;
 		if (this.options.isAnyEnabled(IrritantSet.PREVIEW)) {
-			severity = ProblemSeverities.Warning;
 			problemId = IProblem.PreviewAPIUsed;
 		}
 	}
-	if (problemId == -1 || severity == -1) return;
+	if (problemId == -1) return;
+	if (severity == -1)
+		severity = computeSeverity(IProblem.PreviewAPIUsed);
 	String[] arguments = { featureName };
 	this.handle(problemId, arguments, arguments, severity, sourceStart, sourceEnd);
 }
@@ -12416,6 +12442,6 @@ public boolean scheduleProblemForContext(Runnable problemComputation) {
  * </ul></ul>
  */
 public void close() {
-  // Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
+	this.referenceContext = null;
 }
 }
