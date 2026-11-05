@@ -60,10 +60,10 @@ function overrideECJ() {
   git add pom.xml
   git commit -m "${first_commit_message}"
 
-  # Show the last 15 commits from history
+  # Show the last 100 commits from history
   echo "Find the last Update JDT core commit about 'Override':"
   echo "----------------------------------------"
-  git log --oneline -15 | grep -A 15 -B 15 --color Override
+  git log --oneline -100 | grep -A 100 -B 100 --color Override
 
   # Ask the user to select two commits to base the patch on
   read -p "Enter 'Override' JDT core commit hash: " override_commit
