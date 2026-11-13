@@ -99,9 +99,14 @@ class ASTParserReleaseIT {
     assertThat(unresolved(parse(SOURCE, release(Integer.toString(feature + 1))))).containsExactly(PACK200);
   }
 
+  /**
+   * Java 8 and older are never served from {@code ct.sym}: it only holds the supported public API, which is less than what
+   * a JDK 8 offers ({@code sun.misc.Unsafe}, the Java EE modules...). Such projects need an actual JDK of their version.
+   */
   @Test
-  void release_below_9_keeps_the_api_of_the_running_jvm() {
+  void release_8_and_below_keep_the_api_of_the_running_jvm() {
     assertThat(unresolved(parse(SOURCE, release("8")))).containsExactly(PACK200);
+    assertThat(unresolved(parse(SOURCE, release("7")))).containsExactly(PACK200);
   }
 
   @Test

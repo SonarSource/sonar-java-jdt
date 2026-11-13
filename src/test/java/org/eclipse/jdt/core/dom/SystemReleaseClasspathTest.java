@@ -21,10 +21,17 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import org.eclipse.jdt.internal.compiler.batch.FileSystem.Classpath;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -32,8 +39,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * The guard logic is tested on fake JDK homes: only the {@code release} file and the presence of {@code lib/ct.sym} are
- * read before a classpath entry is created. A last group of tests uses the running JDK to check that the API which is
+ * Whether a release can be served is decided by the {@code ct.sym} of the JDK, as ECJ reads it. The cases where there is
+ * no usable {@code ct.sym} are tested on fake JDK homes. The others use the running JDK, and check that the API which is
  * actually exposed is the one of the requested release.
  *
  * <p>These tests only load {@link SystemReleaseClasspath} from the {@code org.eclipse.jdt.core.dom} package. Loading
@@ -42,124 +49,191 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class SystemReleaseClasspathTest {
 
+  private static final String LOGGER_NAME = SystemReleaseClasspath.class.getName();
+
   @TempDir
   Path temp;
 
-  @Test
-  void is_not_applicable_without_options() {
-    assertThat(SystemReleaseClasspath.isApplicable(null)).isFalse();
-    assertThat(SystemReleaseClasspath.isApplicable(Map.of())).isFalse();
-    assertThat(SystemReleaseClasspath.resolve(null)).isEmpty();
+  private final List<String> warnings = new ArrayList<>();
+  private final Handler handler = new Handler() {
+    @Override
+    public void publish(LogRecord record) {
+      if (record.getLevel().intValue() >= Level.WARNING.intValue()) {
+        warnings.add(new java.text.MessageFormat(record.getMessage()).format(record.getParameters()));
+      }
+    }
+
+    @Override
+    public void flush() {
+      // nothing to flush
+    }
+
+    @Override
+    public void close() {
+      // nothing to close
+    }
+  };
+
+  // java.util.logging only keeps weak references to its loggers: this one must stay reachable for the handler to stay attached
+  private java.util.logging.Logger logger;
+
+  @BeforeEach
+  void captureWarnings() {
+    logger = java.util.logging.Logger.getLogger(LOGGER_NAME);
+    logger.addHandler(handler);
+  }
+
+  @AfterEach
+  void stopCapturingWarnings() {
+    logger.removeHandler(handler);
   }
 
   @Test
-  void is_not_applicable_when_release_is_not_a_number() throws IOException {
-    String home = fakeJdk("21.0.2", true);
+  void is_not_applicable_without_the_release_option_and_says_nothing() {
+    assertThat(SystemReleaseClasspath.isApplicable(null)).isFalse();
+    assertThat(SystemReleaseClasspath.isApplicable(Map.of())).isFalse();
+    assertThat(SystemReleaseClasspath.isApplicable(Map.of(SystemReleaseClasspath.OPTION_JAVA_HOME, System.getProperty("java.home")))).isFalse();
+    assertThat(SystemReleaseClasspath.resolve(null)).isEmpty();
+
+    assertThat(warnings).isEmpty();
+  }
+
+  @Test
+  void falls_back_with_a_warning_when_release_is_not_a_number() throws IOException {
+    String home = fakeJdk(true);
+
     assertThat(isApplicable("latest", home)).isFalse();
     assertThat(isApplicable("", home)).isFalse();
     assertThat(isApplicable("11.0", home)).isFalse();
+
+    assertThat(warnings).hasSize(3);
+    assertThat(warnings.get(0)).contains("'latest' is not a number");
   }
 
   @Test
-  void is_not_applicable_below_release_9() throws IOException {
-    String home = fakeJdk("21.0.2", true);
-    assertThat(isApplicable("8", home)).isFalse();
-    assertThat(isApplicable("7", home)).isFalse();
-    assertThat(isApplicable("9", home)).isTrue();
+  void falls_back_with_a_warning_without_ct_sym() throws IOException {
+    String home = fakeJdk(false);
+
+    assertThat(isApplicable("11", home)).isFalse();
+
+    assertThat(warnings).singleElement().satisfies(warning -> assertThat(warning)
+      .contains("Java 11")
+      .contains(home)
+      .contains("no lib/ct.sym")
+      .contains("API of the running JVM is used instead"));
   }
 
   @Test
-  void is_applicable_only_for_releases_older_than_the_jdk() throws IOException {
-    String home = fakeJdk("21.0.2", true);
-    assertThat(isApplicable("9", home)).isTrue();
-    assertThat(isApplicable("11", home)).isTrue();
-    assertThat(isApplicable("20", home)).isTrue();
-    assertThat(isApplicable("21", home)).isFalse();
-    assertThat(isApplicable("22", home)).isFalse();
-    assertThat(isApplicable("26", home)).isFalse();
-  }
-
-  @Test
-  void release_is_trimmed() throws IOException {
-    assertThat(isApplicable(" 11 ", fakeJdk("21.0.2", true))).isTrue();
-  }
-
-  @Test
-  void is_not_applicable_without_ct_sym() throws IOException {
-    assertThat(isApplicable("11", fakeJdk("21.0.2", false))).isFalse();
-  }
-
-  @Test
-  void is_not_applicable_when_the_home_does_not_exist() {
+  void falls_back_with_a_warning_when_the_home_does_not_exist() {
     assertThat(isApplicable("11", temp.resolve("missing").toString())).isFalse();
+
+    assertThat(warnings).singleElement().satisfies(warning -> assertThat(warning).contains("no lib/ct.sym"));
   }
 
   @Test
-  void is_not_applicable_when_the_version_of_the_jdk_is_unknown() throws IOException {
-    Path withoutReleaseFile = jdkHome("no-release-file", true);
-    assertThat(isApplicable("11", withoutReleaseFile.toString())).isFalse();
+  void falls_back_with_a_warning_when_ct_sym_cannot_be_read() throws IOException {
+    String home = fakeJdk(true);
 
-    Path withoutVersion = jdkHome("no-version", true);
-    Files.writeString(withoutVersion.resolve("release"), "IMPLEMENTOR=\"Someone\"\n");
-    assertThat(isApplicable("11", withoutVersion.toString())).isFalse();
+    assertThat(isApplicable("11", home)).isFalse();
+    assertThat(SystemReleaseClasspath.resolve(options("11", home))).isEmpty();
 
-    Path withGarbageVersion = jdkHome("garbage-version", true);
-    Files.writeString(withGarbageVersion.resolve("release"), "JAVA_VERSION=\"abc\"\n");
-    assertThat(isApplicable("11", withGarbageVersion.toString())).isFalse();
+    assertThat(warnings).hasSize(1);
   }
 
   @Test
-  void reads_the_version_among_other_entries_of_the_release_file() throws IOException {
-    Path home = jdkHome("many-entries", true);
-    Files.writeString(home.resolve("release"), """
-      IMPLEMENTOR="Eclipse Adoptium"
-      JAVA_RUNTIME_VERSION="17.0.9+9"
-      JAVA_VERSION="17.0.9"
-      OS_NAME="Linux"
-      """);
-    assertThat(isApplicable("11", home.toString())).isTrue();
-    assertThat(isApplicable("17", home.toString())).isFalse();
+  void warns_once_per_jdk_and_release() throws IOException {
+    String home = fakeJdk(false);
+    String otherHome = fakeJdk(false);
+
+    for (int i = 0; i < 5; i++) {
+      isApplicable("11", home);
+    }
+    assertThat(warnings).hasSize(1);
+
+    isApplicable("17", home);
+    isApplicable("11", otherHome);
+    assertThat(warnings).hasSize(3);
   }
 
   @Test
-  void supports_the_notations_of_the_version() throws IOException {
-    assertThat(isApplicable("9", fakeJdk("1.8.0_362", true))).isFalse();
-    assertThat(isApplicable("9", fakeJdk("9", true))).isFalse();
-    assertThat(isApplicable("9", fakeJdk("10", true))).isTrue();
-    assertThat(isApplicable("11", fakeJdk("17-ea", true))).isTrue();
-    assertThat(isApplicable("17", fakeJdk("17-ea", true))).isFalse();
-    assertThat(isApplicable("25", fakeJdk("26+13", true))).isTrue();
+  void release_is_trimmed() {
+    assumeRunningJdkCanServeOlderReleases();
+
+    assertThat(SystemReleaseClasspath.isApplicable(Map.of(SystemReleaseClasspath.OPTION_RELEASE, " 11 "))).isTrue();
+    assertThat(warnings).isEmpty();
   }
 
   @Test
   void empty_java_home_option_means_running_jvm() {
+    assumeRunningJdkCanServeOlderReleases();
     Map<String, String> options = new HashMap<>();
     options.put(SystemReleaseClasspath.OPTION_RELEASE, "11");
     options.put(SystemReleaseClasspath.OPTION_JAVA_HOME, "");
-    assertThat(SystemReleaseClasspath.isApplicable(options)).isEqualTo(runningJdkHasCtSym());
+
+    assertThat(SystemReleaseClasspath.isApplicable(options)).isTrue();
   }
 
   @Test
-  void running_jvm_is_used_without_java_home_option() {
+  void running_jvm_serves_every_release_its_ct_sym_describes() {
+    assumeRunningJdkCanServeOlderReleases();
     int feature = Runtime.version().feature();
-    assertThat(SystemReleaseClasspath.isApplicable(Map.of(SystemReleaseClasspath.OPTION_RELEASE, Integer.toString(feature))))
-      .isFalse();
-    assertThat(SystemReleaseClasspath.isApplicable(Map.of(SystemReleaseClasspath.OPTION_RELEASE, Integer.toString(feature + 1))))
-      .isFalse();
-    assertThat(SystemReleaseClasspath.isApplicable(Map.of(SystemReleaseClasspath.OPTION_RELEASE, "11")))
-      .isEqualTo(runningJdkHasCtSym());
+
+    assertThat(isApplicableOnRunningJvm("9")).isTrue();
+    assertThat(isApplicableOnRunningJvm("11")).isTrue();
+    assertThat(isApplicableOnRunningJvm(Integer.toString(feature - 1))).isTrue();
+    assertThat(warnings).isEmpty();
+  }
+
+  /**
+   * ECJ cannot serve from {@code ct.sym} the release of the JDK that owns it: that release has no module information
+   * there, and ECJ fails to initialize the entry. Looking at it up front is what avoids a failure during the parse.
+   */
+  @Test
+  void running_jvm_falls_back_with_a_warning_for_its_own_release() {
+    assumeRunningJdkCanServeOlderReleases();
+    int feature = Runtime.version().feature();
+
+    assertThat(isApplicableOnRunningJvm(Integer.toString(feature))).isFalse();
+
+    assertThat(warnings).singleElement().satisfies(warning -> assertThat(warning).contains("Java " + feature));
   }
 
   @Test
-  void resolve_matches_is_applicable() throws IOException {
-    String home = fakeJdk("21.0.2", false);
-    assertThat(SystemReleaseClasspath.resolve(options("11", home))).isEmpty();
-    assertThat(SystemReleaseClasspath.resolve(options("21", fakeJdk("21.0.2", true)))).isEmpty();
+  void running_jvm_falls_back_with_a_warning_for_releases_that_ct_sym_does_not_describe() {
+    assumeRunningJdkCanServeOlderReleases();
+    int newer = Runtime.version().feature() + 3;
+
+    assertThat(isApplicableOnRunningJvm(Integer.toString(newer))).isFalse();
+
+    assertThat(warnings).singleElement().satisfies(warning -> assertThat(warning).contains("Java " + newer));
+  }
+
+  /**
+   * Java 8 and older are left to an actual JDK of that version, see {@link SystemReleaseClasspath#MIN_RELEASE}. It is a
+   * choice and not a problem of the JDK, so it is neither a warning nor dependent on the JDK: a fake one is enough.
+   */
+  @Test
+  void java_8_and_older_are_never_served_and_say_nothing() throws IOException {
+    assertThat(isApplicable("8", fakeJdk(true))).isFalse();
+    assertThat(isApplicable("7", fakeJdk(true))).isFalse();
+    assertThat(isApplicable("1", fakeJdk(false))).isFalse();
+    assertThat(isApplicableOnRunningJvm("8")).isFalse();
+    assertThat(SystemReleaseClasspath.resolve(Map.of(SystemReleaseClasspath.OPTION_RELEASE, "8"))).isEmpty();
+
+    assertThat(warnings).isEmpty();
+  }
+
+  @Test
+  void the_oldest_release_served_is_java_9() {
+    assumeRunningJdkCanServeOlderReleases();
+
+    assertThat(SystemReleaseClasspath.MIN_RELEASE).isEqualTo(9);
+    assertThat(isApplicableOnRunningJvm("9")).isTrue();
   }
 
   @Test
   void resolved_classpath_exposes_only_the_api_of_the_requested_release() {
-    assumeTrue(runningJdkHasCtSym() && Runtime.version().feature() > 17);
+    assumeRunningJdkCanServeOlderReleases();
 
     Optional<Classpath> release11 = SystemReleaseClasspath.resolve(Map.of(SystemReleaseClasspath.OPTION_RELEASE, "11"));
     Optional<Classpath> release17 = SystemReleaseClasspath.resolve(Map.of(SystemReleaseClasspath.OPTION_RELEASE, "17"));
@@ -175,13 +249,21 @@ class SystemReleaseClasspathTest {
 
   @Test
   void resolved_classpath_can_come_from_an_explicit_jdk() {
-    String home = System.getProperty("java.home");
-    assumeTrue(runningJdkHasCtSym() && Runtime.version().feature() > 11);
+    assumeRunningJdkCanServeOlderReleases();
 
-    Optional<Classpath> release11 = SystemReleaseClasspath.resolve(options("11", home));
+    Optional<Classpath> release11 = SystemReleaseClasspath.resolve(options("11", System.getProperty("java.home")));
 
     assertThat(release11).isPresent();
     assertThat(declares(release11.get(), "java/util/jar", "Pack200")).isTrue();
+  }
+
+  private static boolean isApplicableOnRunningJvm(String release) {
+    return SystemReleaseClasspath.isApplicable(Map.of(SystemReleaseClasspath.OPTION_RELEASE, release));
+  }
+
+  private static void assumeRunningJdkCanServeOlderReleases() {
+    assumeTrue(new File(System.getProperty("java.home"), "lib/ct.sym").isFile(), "the running JVM has no lib/ct.sym");
+    assumeTrue(Runtime.version().feature() > 17, "the running JVM must be newer than Java 17");
   }
 
   private static boolean declares(Classpath classpath, String packageName, String simpleName) {
@@ -197,10 +279,6 @@ class SystemReleaseClasspathTest {
     }
   }
 
-  private static boolean runningJdkHasCtSym() {
-    return new File(System.getProperty("java.home"), "lib/ct.sym").isFile();
-  }
-
   private static boolean isApplicable(String release, String javaHome) {
     return SystemReleaseClasspath.isApplicable(options(release, javaHome));
   }
@@ -212,19 +290,17 @@ class SystemReleaseClasspathTest {
     return options;
   }
 
-  private String fakeJdk(String version, boolean withCtSym) throws IOException {
-    Path home = jdkHome(Files.createTempDirectory(temp, "jdk-").getFileName().toString(), withCtSym);
-    Files.writeString(home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\n");
-    return home.toString();
-  }
-
-  private Path jdkHome(String name, boolean withCtSym) throws IOException {
-    Path home = temp.resolve(name);
+  /**
+   * A JDK home, different for every call so that the warning of one test does not hide the one of another. When
+   * {@code withCtSym} is set, the {@code lib/ct.sym} file exists but is not a valid archive.
+   */
+  private String fakeJdk(boolean withCtSym) throws IOException {
+    Path home = Files.createTempDirectory(temp, "jdk-");
     Path lib = Files.createDirectories(home.resolve("lib"));
     if (withCtSym) {
-      Files.createFile(lib.resolve("ct.sym"));
+      Files.writeString(lib.resolve("ct.sym"), "this is not a zip archive");
     }
-    return home;
+    return home.toString();
   }
 
 }
