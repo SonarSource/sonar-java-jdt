@@ -238,7 +238,13 @@ public class ASTParser {
 		ArrayList<Classpath> allClasspaths = new ArrayList<>();
 		try {
 			if ((this.bits & CompilationUnitResolver.INCLUDE_RUNNING_VM_BOOTCLASSPATH) != 0) {
-				org.eclipse.jdt.internal.compiler.util.Util.collectRunningVMBootclasspath(allClasspaths);
+				// SonarSource: expose only the API of the requested release instead of the whole running JDK, see SystemReleaseClasspath
+				java.util.Optional<Classpath> systemRelease = SystemReleaseClasspath.resolve(this.compilerOptions);
+				if (systemRelease.isPresent()) {
+					allClasspaths.add(systemRelease.get());
+				} else {
+					org.eclipse.jdt.internal.compiler.util.Util.collectRunningVMBootclasspath(allClasspaths);
+				}
 			}
 			if (this.sourcepaths != null) {
 				for (int i = 0, max = this.sourcepaths.length; i < max; i++) {
