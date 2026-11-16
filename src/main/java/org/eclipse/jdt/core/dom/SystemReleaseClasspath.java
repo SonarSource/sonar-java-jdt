@@ -15,86 +15,47 @@ package org.eclipse.jdt.core.dom;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.eclipse.jdt.internal.compiler.batch.FileSystem;
 import org.eclipse.jdt.internal.compiler.batch.FileSystem.Classpath;
+import org.eclipse.jdt.internal.compiler.util.Util;
 
 /**
- * Lets {@link ASTParser} see the Java API of a given Java release, instead of the API of the JDK it runs on.
+ * Gives the {@link ASTParser} the platform classes of a JDK, exposing only the API of a given Java release when asked
+ * to (the {@code --release} flag of {@code javac}, JEP 247), as served by the {@code lib/ct.sym} of that JDK.
  *
- * <h2>The problem</h2>
- * The compliance level given to the parser ({@code JavaCore.COMPILER_COMPLIANCE} and friends) only controls
- * <em>language</em> features: whether {@code var}, records or switch expressions are accepted. It has no effect on
- * <em>which JDK classes can be resolved</em>. Those come from the classpath, and when
- * {@code ASTParser#setEnvironment(..., includeRunningVMBootclasspath = true)} is used, {@code ASTParser} adds the
- * runtime image ({@code jrt-fs}) of the JVM it is running on.
- *
- * <p>Consequently, when the analyzer runs on JDK 26 and analyzes a project targeting Java 11:
+ * <p>Two options drive it, and both are set by the client of the parser:
  * <ul>
- *   <li>a use of an API added after 11 (for example {@code java.lang.Record}) resolves successfully, although the
- *   project could not compile;</li>
- *   <li>a use of an API removed before 26 (for example {@code java.util.jar.Pack200}) is reported as an unresolved type,
- *   although it is valid for the project.</li>
+ *   <li>{@link #OPTION_RELEASE}: the release whose API must be visible;</li>
+ *   <li>{@link #OPTION_JAVA_HOME}: the home of the modular JDK to read the platform classes from. It is set only when
+ *   the parser must not include the running VM.</li>
  * </ul>
- * The semantic model therefore depends on the JDK that happens to run the analyzer instead of on the project.
  *
- * <h2>The solution</h2>
- * JEP 247 ({@code javac --release N}) solves the same problem for the Java compiler: the JDK ships {@code lib/ct.sym},
- * an archive with the signatures of the public API of every supported older release. ECJ already knows how to read it
- * ({@link FileSystem#getOlderSystemRelease}), but it only exposes this through its batch compiler command line. The DOM
- * {@code ASTParser} has no way to request it: {@code JavaCore.COMPILER_RELEASE} is only honored by the JDT project
- * builder, and the classpath built by {@code ASTParser#getClasspath()} always uses the running VM.
+ * <h2>Running VM</h2>
+ * When the parser includes the running VM ({@link #resolveTargetReleaseOfRunningVM(Map)}), the running JDK is the
+ * source of the platform classes.
  *
- * <p>This class bridges that gap. The client opts in by adding two entries to the compiler options passed to
- * {@link ASTParser#setCompilerOptions(Map)}:
- * <ul>
- *   <li>{@link #OPTION_RELEASE}: the Java release whose API must be visible, such as {@code "11"};</li>
- *   <li>{@link #OPTION_JAVA_HOME} (optional): home of the JDK providing {@code ct.sym}. Defaults to the
- *   {@code java.home} of the running JVM.</li>
- * </ul>
- * When the option is present and the running-VM bootclasspath was requested, {@code ASTParser#getClasspath()} uses the
- * entry returned by {@link #resolve(Map)} <em>in place of</em> the running-VM bootclasspath. Everything else is
- * untouched: source paths and the project's own jars are added exactly as before, and the real
- * {@code ICompilationUnitResolver} is still used. Since both the single-file ({@code createAST}) and the batch
- * ({@code createASTs}) code paths build their classpath through {@code getClasspath()}, both are covered.
+ * <h2>JDK given by the client</h2>
+ * When it does not ({@link #resolveTargetRelease(Map)}), nothing is added unless {@link #OPTION_JAVA_HOME} is set. A
+ * missing home means that the classpath already holds a non-modular JDK ({@code rt.jar}, {@code android.jar}), which is
+ * the actual platform to analyze against.
  *
- * <h2>Releases that are not served on purpose</h2>
- * Java 8 and older ({@code release < }{@value #MIN_RELEASE}) are never served from {@code ct.sym}, whatever the JDK:
- * {@link #resolve(Map)} is empty and {@link #isApplicable(Map)} is {@code false}, without a warning. See
- * {@link #MIN_RELEASE} for the reason. Such projects must be analyzed against an actual JDK of their version.
+ * <h2>When the release is used</h2>
+ * The release API is served from {@code ct.sym} only if {@link #OPTION_RELEASE} is a number which is at least
+ * {@value #MIN_RELEASE} and older than the JDK, and the JDK has a {@code lib/ct.sym}. Releases 8 and older are left to
+ * an actual JDK of that version: {@code ct.sym} only describes the supported public API, so it hides APIs that the real
+ * JDK offered ({@code sun.misc.Unsafe}, {@code com.sun.*}), and ECJ does not resolve the Java EE and CORBA modules that
+ * Java 8 shipped from it. A JDK does not describe its own release in {@code ct.sym} either: its own API already is the
+ * one of that release. In all these cases the JDK is used as is, silently.
  *
- * <h2>When the release cannot be served</h2>
- * The release is requested by the client, and the JDK that provides {@code ct.sym} may not be able to serve it. In that
- * case {@link #resolve(Map)} logs <b>one warning</b> per distinct (JDK, release) and returns an empty result, and
- * {@link #isApplicable(Map)} returns {@code false}, so that the parser keeps its previous behavior (the API of the
- * running JVM). This happens when:
- * <ul>
- *   <li>{@link #OPTION_RELEASE} is not a number;</li>
- *   <li>the JDK has no {@code lib/ct.sym}, as is the case for some JREs and custom {@code jlink} images;</li>
- *   <li>{@code ct.sym} cannot be read, or does not describe the release (older than what the JDK supports, newer than
- *   the JDK itself, ...). This is what ECJ reports when it initializes the entry, so the decision is exactly the one
- *   ECJ would take later during the parse.</li>
- * </ul>
- * Nothing is logged when {@link #OPTION_RELEASE} is absent: the client did not ask for anything.
- *
- * <h2>Which JDK provides {@code ct.sym}</h2>
- * The JDK given by {@link #OPTION_JAVA_HOME}, or the running JVM when the option is missing. This lets a client use the
- * JDK that the user configured (for example through {@code sonar.java.jdkHome}) even when the analysis itself runs on a
- * JRE that does not ship {@code ct.sym}.
- *
- * <h2>Coordination with the client</h2>
- * When the client passes a JDK through {@code ASTParser#setEnvironment} (for example the {@code lib/jrt-fs.jar} of a
- * configured JDK) it normally disables the running-VM bootclasspath, and this class is then never consulted. A client
- * that wants the release to apply to such a JDK should ask {@link #isApplicable(Map)}, remove that JDK from the
- * classpath it gives to the parser, set {@link #OPTION_JAVA_HOME} to it, and request the running-VM bootclasspath: the
- * entry returned by {@link #resolve(Map)} then takes its place.
- *
- * <h2>Why this lives in {@code org.eclipse.jdt.core.dom}</h2>
- * It is called from the patched {@link ASTParser}, which is itself an override of the upstream class kept by this
- * repository. See {@code overrideECJ.sh} for how the patch is re-applied on every upgrade of ECJ.
+ * <p>If the release should be served but ECJ cannot open it, for instance because {@code ct.sym} is corrupt, an
+ * {@link IllegalStateException} is thrown.
  */
 public final class SystemReleaseClasspath {
 
@@ -105,106 +66,101 @@ public final class SystemReleaseClasspath {
   public static final String OPTION_RELEASE = "org.sonarsource.java.jdt.systemRelease";
 
   /**
-   * Optional compiler option with the home directory of the JDK that provides {@code lib/ct.sym}.
-   * When missing, the {@code java.home} system property is used.
+   * Compiler option with the home directory of the modular JDK to read the platform classes from, when the parser does
+   * not include the running VM. Not an official JDT option: it is read only by this class.
    */
   public static final String OPTION_JAVA_HOME = "org.sonarsource.java.jdt.systemRelease.javaHome";
 
   /**
-   * Oldest release served from {@code ct.sym}. Java 8 and older are deliberately left to an actual JDK of that version
-   * (or its {@code rt.jar}) on the classpath: {@code ct.sym} only describes the supported public API, so for such releases
-   * it hides APIs that the real JDK offered ({@code sun.misc.Unsafe}, {@code com.sun.*}), and ECJ does not resolve the
-   * Java EE and CORBA modules that Java 8 shipped (for example {@code javax.xml.bind}) from it. For these releases
-   * {@link #resolve(Map)} returns an empty result silently: it is a choice, not a problem of the JDK.
+   * Oldest release served from {@code ct.sym}, see the class documentation.
    */
   static final int MIN_RELEASE = 9;
 
-  private static final System.Logger LOG = System.getLogger(SystemReleaseClasspath.class.getName());
-
-  /**
-   * (JDK, release) pairs already reported, so that a parser created for every file does not repeat the same warning.
-   */
-  private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
+  private static final Pattern JAVA_VERSION_LINE = Pattern.compile("JAVA_VERSION=\"?(?:1\\.(\\d+)|(\\d+))[^\"]*\"?\\s*");
 
   private SystemReleaseClasspath() {
     // utility class
   }
 
   /**
-   * Tells whether {@link #resolve(Map)} would substitute the API of a release, without keeping any classpath entry.
-   * Clients use it to decide whether the JDK they were given can be replaced by the release API.
-   * Logs the same warning as {@link #resolve(Map)} when the release was requested but cannot be served.
+   * The platform classes of the running VM: the API of the release requested in {@code options} if the running JDK can
+   * serve it, the whole API of the running JDK otherwise.
    *
-   * @param options the compiler options of the {@link ASTParser}, may be {@code null}
-   * @return {@code true} if a classpath entry for the requested release can be built from the selected JDK
+   * @throws IllegalStateException if the release should be served but ECJ cannot open it
    */
-  public static boolean isApplicable(Map<String, String> options) {
-    return resolve(options).isPresent();
+  static List<Classpath> resolveTargetReleaseOfRunningVM(Map<String, String> options) {
+    String javaHome = System.getProperty("java.home");
+    Optional<Classpath> release = targetRelease(options, javaHome, Runtime.version().feature());
+    if (release.isPresent()) {
+      return List.of(release.get());
+    }
+    List<Classpath> runningVM = new ArrayList<>();
+    Util.collectRunningVMBootclasspath(runningVM);
+    return runningVM;
   }
 
   /**
-   * Builds the classpath entry exposing only the API of the release selected in {@code options}.
+   * The platform classes of the JDK at {@link #OPTION_JAVA_HOME}: the API of the release requested in {@code options}
+   * if that JDK can serve it, the whole API of that JDK otherwise. Nothing if there is no such option.
    *
-   * @param options the compiler options of the {@link ASTParser}, may be {@code null}
-   * @return the entry to use instead of the running-VM bootclasspath, or empty if the release API is not requested, or
-   *         cannot be served by the selected JDK (a warning is logged in that case, see the class documentation)
+   * @throws IllegalStateException if the release should be served but ECJ cannot open it
    */
-  static Optional<Classpath> resolve(Map<String, String> options) {
-    if (options == null || options.get(OPTION_RELEASE) == null) {
-      return Optional.empty();
+  static List<Classpath> resolveTargetRelease(Map<String, String> options) {
+    String javaHome = options == null ? null : options.get(OPTION_JAVA_HOME);
+    if (javaHome == null) {
+      return List.of();
     }
-    String release = options.get(OPTION_RELEASE).trim();
-    String explicitJavaHome = options.get(OPTION_JAVA_HOME);
-    String javaHome = explicitJavaHome == null || explicitJavaHome.isEmpty() ? System.getProperty("java.home") : explicitJavaHome;
+    Optional<Classpath> release = jdkFeatureVersion(javaHome).flatMap(feature -> targetRelease(options, javaHome, feature));
+    return List.of(release.orElseGet(() -> FileSystem.getJrtClasspath(javaHome, null, null, null)));
+  }
 
-    if (isBelowMinimumRelease(release)) {
-      LOG.log(System.Logger.Level.DEBUG, "The API of Java {0} is not served from ct.sym, the API of the running JVM is used instead.", release);
+  private static Optional<Classpath> targetRelease(Map<String, String> options, String javaHome, int jdkFeatureVersion) {
+    Optional<Integer> release = requestedRelease(options);
+    if (release.isEmpty() || release.get() < MIN_RELEASE || release.get() >= jdkFeatureVersion
+      || !Files.isRegularFile(Path.of(javaHome, "lib", "ct.sym"))) {
       return Optional.empty();
     }
-    String problem = checkRelease(release);
-    if (problem == null && javaHome == null) {
-      problem = "the JDK is unknown";
+    return Optional.of(getInitializedClasspath(javaHome, release.get().toString()));
+  }
+
+  private static Optional<Integer> requestedRelease(Map<String, String> options) {
+    String release = options == null ? null : options.get(OPTION_RELEASE);
+    if (release == null) {
+      return Optional.empty();
     }
-    if (problem == null && !Files.isRegularFile(Path.of(javaHome, "lib", "ct.sym"))) {
-      problem = "it has no lib/ct.sym";
+    try {
+      return Optional.of(Integer.parseInt(release.trim()));
+    } catch (NumberFormatException e) {
+      return Optional.empty();
     }
-    if (problem != null) {
-      return fallback(javaHome, release, problem);
-    }
+  }
+
+  private static Classpath getInitializedClasspath(String javaHome, String release) {
     try {
       Classpath classpath = FileSystem.getOlderSystemRelease(javaHome, release, null);
       // Initializing now is what tells whether ct.sym describes this release: ECJ would otherwise fail later, during the parse
       classpath.initialize();
-      return Optional.of(classpath);
+      return classpath;
     } catch (IOException | RuntimeException e) {
-      return fallback(javaHome, release, e.getMessage() != null ? e.getMessage() : e.toString());
+      throw new IllegalStateException("The API of Java %s cannot be served by the JDK %s: %s".formatted(
+        release, javaHome, e.getMessage() != null ? e.getMessage() : e.toString()), e);
     }
   }
 
-  private static boolean isBelowMinimumRelease(String release) {
-    try {
-      return Integer.parseInt(release) < MIN_RELEASE;
-    } catch (NumberFormatException e) {
-      return false; // reported by checkRelease
+  private static Optional<Integer> jdkFeatureVersion(String javaHome) {
+    Path releaseFile = Path.of(javaHome, "release");
+    if (!Files.isRegularFile(releaseFile)) {
+      return Optional.empty();
     }
-  }
-
-  private static String checkRelease(String release) {
-    try {
-      Integer.parseInt(release);
-      return null;
-    } catch (NumberFormatException e) {
-      return "the release '" + release + "' is not a number";
+    try (Stream<String> lines = Files.lines(releaseFile)) {
+      return lines
+        .map(JAVA_VERSION_LINE::matcher)
+        .filter(Matcher::matches)
+        .findFirst()
+        .map(m -> Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2)));
+    } catch (IOException | RuntimeException e) {
+      return Optional.empty();
     }
-  }
-
-  private static Optional<Classpath> fallback(String javaHome, String release, String problem) {
-    if (REPORTED.add(javaHome + '|' + release)) {
-      LOG.log(System.Logger.Level.WARNING,
-        "The API of Java {0} cannot be served by the JDK ''{1}'' ({2}): the API of the running JVM is used instead.",
-        release, javaHome, problem);
-    }
-    return Optional.empty();
   }
 
 }

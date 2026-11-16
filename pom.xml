@@ -11,7 +11,7 @@
 
   <groupId>org.sonarsource.java</groupId>
   <artifactId>jdt-package</artifactId>
-  <version>1.9-SNAPSHOT</version>
+  <version>1.11-SNAPSHOT</version>
 
   <name>Eclipse JDT Core Package</name>
   <description>Packaging of Eclipse JDT Core for SonarQube Java Analyzer</description>
@@ -28,9 +28,9 @@
     -->
     <sonar.exclusions>src/main/java/org/eclipse/jdt/**</sonar.exclusions>
 
-    <jdk.min.version>21</jdk.min.version>
     <version.junit.jupiter>5.11.3</version.junit.jupiter>
     <version.assertj>3.27.7</version.assertj>
+    <jdk.min.version>21</jdk.min.version>
     <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
     <!-- Release: enable publication to Bintray -->
     <artifactsToPublish>${project.groupId}:${project.artifactId}:jar</artifactsToPublish>
@@ -71,7 +71,7 @@
       <dependency>
         <groupId>org.eclipse.jdt</groupId>
         <artifactId>org.eclipse.jdt.core</artifactId>
-        <version>3.46.0</version>
+        <version>3.47.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.eclipse.platform</groupId>
@@ -99,6 +99,18 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${version.junit.jupiter}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${version.assertj}</version>
+        <scope>test</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -110,14 +122,10 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>${version.junit.jupiter}</version>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
-      <version>${version.assertj}</version>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -177,7 +185,6 @@
           </execution>
         </executions>
       </plugin>
-
       <!--
       Following workaround is needed for IDEs, which otherwise use original classes, what causes java.lang.SecurityException
       "signer information does not match signer information of other classes in the same package"

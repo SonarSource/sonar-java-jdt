@@ -41,6 +41,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -95,14 +96,11 @@ class ASTParserReleaseIT {
   @Test
   void release_not_older_than_the_running_jvm_keeps_the_api_of_the_running_jvm() {
     int feature = Runtime.version().feature();
+
     assertThat(unresolved(parse(SOURCE, release(Integer.toString(feature))))).containsExactly(PACK200);
     assertThat(unresolved(parse(SOURCE, release(Integer.toString(feature + 1))))).containsExactly(PACK200);
   }
 
-  /**
-   * Java 8 and older are never served from {@code ct.sym}: it only holds the supported public API, which is less than what
-   * a JDK 8 offers ({@code sun.misc.Unsafe}, the Java EE modules...). Such projects need an actual JDK of their version.
-   */
   @Test
   void release_8_and_below_keep_the_api_of_the_running_jvm() {
     assertThat(unresolved(parse(SOURCE, release("8")))).containsExactly(PACK200);
@@ -110,21 +108,31 @@ class ASTParserReleaseIT {
   }
 
   @Test
-  void jdk_given_explicitly_provides_the_release_api() {
-    Map<String, String> options = release("11");
-    options.put(SystemReleaseClasspath.OPTION_JAVA_HOME, System.getProperty("java.home"));
-
-    assertThat(unresolved(parse(SOURCE, options))).containsExactly(RECORD);
+  void jdk_given_explicitly_provides_the_release_api_when_the_running_vm_is_not_included() {
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk("11"), false))).containsExactly(RECORD);
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk("17"), false))).containsExactly(PACK200);
   }
 
   @Test
-  void jdk_without_ct_sym_keeps_the_api_of_the_running_jvm() throws IOException {
-    Path jreLikeHome = Files.createDirectories(temp.resolve("jre-like"));
-    Files.writeString(jreLikeHome.resolve("release"), "JAVA_VERSION=\"21.0.2\"\n");
-    Map<String, String> options = release("11");
-    options.put(SystemReleaseClasspath.OPTION_JAVA_HOME, jreLikeHome.toString());
+  void jdk_given_explicitly_is_seen_as_is_when_the_release_cannot_be_served() {
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk("8"), false))).containsExactly(PACK200);
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk(Integer.toString(Runtime.version().feature())), false))).containsExactly(PACK200);
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk("11").entrySet().stream()
+      .filter(e -> !e.getKey().equals(SystemReleaseClasspath.OPTION_RELEASE))
+      .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)), false))).containsExactly(PACK200);
+  }
 
-    assertThat(unresolved(parse(SOURCE, options))).containsExactly(PACK200);
+  @Test
+  void jdk_with_a_broken_ct_sym_is_an_error() throws IOException {
+    Path home = Files.createDirectories(temp.resolve("jdk/lib"));
+    Files.createSymbolicLink(home.resolve("jrt-fs.jar"), Path.of(System.getProperty("java.home"), "lib", "jrt-fs.jar"));
+    Files.createSymbolicLink(home.resolve("modules"), Path.of(System.getProperty("java.home"), "lib", "modules"));
+    Files.writeString(home.resolve("ct.sym"), "this is not a zip archive");
+    Files.writeString(home.getParent().resolve("release"), "JAVA_VERSION=\"" + Runtime.version().feature() + "\"\n");
+    Map<String, String> options = release("11");
+    options.put(SystemReleaseClasspath.OPTION_JAVA_HOME, home.getParent().toString());
+
+    assertThatThrownBy(() -> parse(SOURCE, options, false)).isInstanceOf(IllegalStateException.class);
   }
 
   @Test
@@ -160,7 +168,7 @@ class ASTParserReleaseIT {
   }
 
   @Test
-  void release_is_ignored_when_the_running_vm_bootclasspath_is_not_requested() {
+  void nothing_is_added_when_the_running_vm_is_not_included_and_there_is_no_jdk() {
     CompilationUnit unit = parse("class Example { String text; }", release("11"), false);
 
     assertThat(unresolved(unit)).containsExactly("String");
@@ -170,6 +178,12 @@ class ASTParserReleaseIT {
     Map<String, String> options = new HashMap<>(JavaCore.getOptions());
     JavaCore.setComplianceOptions(release, options);
     options.put(SystemReleaseClasspath.OPTION_RELEASE, release);
+    return options;
+  }
+
+  private static Map<String, String> releaseOfJdk(String release) {
+    Map<String, String> options = release(release);
+    options.put(SystemReleaseClasspath.OPTION_JAVA_HOME, System.getProperty("java.home"));
     return options;
   }
 
