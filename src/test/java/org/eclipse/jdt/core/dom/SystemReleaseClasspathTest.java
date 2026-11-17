@@ -141,17 +141,19 @@ class SystemReleaseClasspathTest {
     assumeRunningJdkCanServeOlderReleases();
     String home = fakeJdk("21.0.2", true);
 
-    assertThatThrownBy(() -> SystemReleaseClasspath.resolveTargetRelease(options("11", home)))
+    var options = options("11", home);
+    assertThatThrownBy(() -> SystemReleaseClasspath.resolveTargetRelease(options))
       .isInstanceOf(IllegalStateException.class)
       .hasMessageContaining("Java 11")
       .hasMessageContaining(home);
   }
 
   @Test
-  void throws_for_a_release_that_ct_sym_does_not_describe() {
+  void throws_for_a_release_that_ct_sym_does_not_describe() throws IOException {
     assumeRunningJdkCanServeOlderReleases();
+    var options = options("98", fakeJdkWithRunningCtSym("99"));
     // the release file of a JDK 99 on top of the ct.sym of the running one
-    assertThatThrownBy(() -> SystemReleaseClasspath.resolveTargetRelease(options("98", fakeJdkWithRunningCtSym("99"))))
+    assertThatThrownBy(() -> SystemReleaseClasspath.resolveTargetRelease(options))
       .isInstanceOf(IllegalStateException.class);
   }
 
