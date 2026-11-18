@@ -50,7 +50,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * <p>The API of a release is observed through two types of the JDK:
  * <ul>
  *   <li>{@code java.util.jar.Pack200}, which exists in Java 11 and was removed in Java 14;</li>
- *   <li>{@code java.lang.Record}, which was added in Java 16.</li>
+ *   <li>{@code java.lang.Record}, which was added in Java 16;</li>
+ *   <li>{@code java.net.spi.InetAddressResolver}, which was added in Java 18.</li>
  * </ul>
  *
  * <p>Unit tests cannot cover this code: they would load the patched {@code ASTParser} next to the signed classes of the
@@ -60,11 +61,13 @@ class ASTParserReleaseIT {
 
   private static final String PACK200 = "java.util.jar.Pack200";
   private static final String RECORD = "java.lang.Record";
+  private static final String INET_ADDRESS_RESOLVER = "java.net.spi.InetAddressResolver";
 
   private static final String SOURCE = """
     class Example {
       java.util.jar.Pack200 removedInJdk14;
       java.lang.Record addedInJdk16;
+      java.net.spi.InetAddressResolver addedInJdk18;
     }
     """;
 
@@ -79,12 +82,12 @@ class ASTParserReleaseIT {
 
   @Test
   void release_11_sees_the_api_of_java_11() {
-    assertThat(unresolved(parse(SOURCE, release("11")))).containsExactly(RECORD);
+    assertThat(unresolved(parse(SOURCE, release("11")))).containsExactlyInAnyOrder(RECORD, INET_ADDRESS_RESOLVER);
   }
 
   @Test
   void release_17_sees_the_api_of_java_17() {
-    assertThat(unresolved(parse(SOURCE, release("17")))).containsExactly(PACK200);
+    assertThat(unresolved(parse(SOURCE, release("17")))).containsExactlyInAnyOrder(PACK200, INET_ADDRESS_RESOLVER);
   }
 
   @Test
@@ -108,8 +111,8 @@ class ASTParserReleaseIT {
 
   @Test
   void jdk_given_explicitly_provides_the_release_api_when_the_running_vm_is_not_included() {
-    assertThat(unresolved(parse(SOURCE, releaseOfJdk("11"), false))).containsExactly(RECORD);
-    assertThat(unresolved(parse(SOURCE, releaseOfJdk("17"), false))).containsExactly(PACK200);
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk("11"), false))).containsExactlyInAnyOrder(RECORD, INET_ADDRESS_RESOLVER);
+    assertThat(unresolved(parse(SOURCE, releaseOfJdk("17"), false))).containsExactlyInAnyOrder(PACK200, INET_ADDRESS_RESOLVER);
   }
 
   @Test
@@ -163,7 +166,7 @@ class ASTParserReleaseIT {
       }
     }, null);
 
-    assertThat(unresolved).containsExactly(RECORD);
+    assertThat(unresolved).containsExactlyInAnyOrder(RECORD, INET_ADDRESS_RESOLVER);
   }
 
   @Test

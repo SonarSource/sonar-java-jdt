@@ -19,11 +19,14 @@ package org.eclipse.jdt.core.dom;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.jdt.internal.compiler.batch.ClasspathJep247;
+import org.eclipse.jdt.internal.compiler.batch.ClasspathJrt;
 import org.eclipse.jdt.internal.compiler.batch.FileSystem.Classpath;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -159,22 +162,49 @@ class SystemReleaseClasspathTest {
   }
 
   private static void assertThatIsApiOfJava11(List<Classpath> classpath) {
-    assertThat(classpath).hasSize(1);
+    assertThatIsServedFromCtSym(classpath, "11");
     assertThat(declares(classpath, "java/util/jar", "Pack200")).as("Pack200 exists in 11").isTrue();
     assertThat(declares(classpath, "java/lang", "Record")).as("Record was added in 16").isFalse();
     assertThat(declares(classpath, "java/lang", "String")).isTrue();
   }
 
   private static void assertThatIsApiOfJava17(List<Classpath> classpath) {
-    assertThat(classpath).hasSize(1);
+    assertThatIsServedFromCtSym(classpath, "17");
     assertThat(declares(classpath, "java/util/jar", "Pack200")).as("Pack200 was removed in 14").isFalse();
     assertThat(declares(classpath, "java/lang", "Record")).isTrue();
   }
 
+  /**
+   * ECJ serves an older release from {@code ct.sym} with a {@link ClasspathJep247}, which remembers the release it was
+   * created for.
+   */
+  private static void assertThatIsServedFromCtSym(List<Classpath> classpath, String expectedRelease) {
+    assertThat(classpath).hasSize(1);
+    assertThat(classpath.get(0)).isInstanceOf(ClasspathJep247.class);
+    assertThat(releaseOf((ClasspathJep247) classpath.get(0))).isEqualTo(expectedRelease);
+  }
+
+  /**
+   * Without a release to serve, ECJ reads the runtime image of the JDK, with {@link ClasspathJrt} entries only: none
+   * of them is bound to a release.
+   */
   private static void assertThatIsRunningJdkApi(List<Classpath> classpath) {
-    assertThat(classpath).isNotEmpty();
+    assertThat(classpath).isNotEmpty().allSatisfy(entry -> assertThat(entry)
+      .isInstanceOf(ClasspathJrt.class)
+      .isNotInstanceOf(ClasspathJep247.class));
     assertThat(declares(classpath, "java/lang", "Record")).isTrue();
     assertThat(declares(classpath, "java/lang", "String")).isTrue();
+  }
+
+  private static String releaseOf(ClasspathJep247 classpath) {
+    try {
+      // not exposed by ECJ
+      Field compliance = ClasspathJep247.class.getDeclaredField("compliance");
+      compliance.setAccessible(true);
+      return (String) compliance.get(classpath);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("ECJ no longer keeps the release of a ClasspathJep247 in 'compliance'", e);
+    }
   }
 
   private static boolean declares(List<Classpath> classpath, String packageName, String simpleName) {
