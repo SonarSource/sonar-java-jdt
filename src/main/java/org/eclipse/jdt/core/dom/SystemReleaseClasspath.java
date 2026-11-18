@@ -74,7 +74,7 @@ public final class SystemReleaseClasspath {
   /**
    * Oldest release served from {@code ct.sym}, see the class documentation.
    */
-  static final int MIN_RELEASE = 9;
+  private static final int MIN_RELEASE = 9;
 
   private static final Pattern JAVA_VERSION_LINE = Pattern.compile("JAVA_VERSION=\"?(?:1\\.(\\d+)|(\\d+))[^\"]*\"?\\s*");
 
