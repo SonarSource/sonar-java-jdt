@@ -120,7 +120,7 @@ public final class SystemReleaseClasspath {
       || !Files.isRegularFile(Path.of(javaHome, "lib", "ct.sym"))) {
       return Optional.empty();
     }
-    return Optional.of(getInitializedClasspath(javaHome, release.get().toString()));
+    return Optional.ofNullable(getInitializedClasspath(javaHome, release.get().toString()));
   }
 
   private static Optional<Integer> requestedRelease(Map<String, String> options) {
@@ -142,8 +142,7 @@ public final class SystemReleaseClasspath {
       classpath.initialize();
       return classpath;
     } catch (IOException | RuntimeException e) {
-      throw new IllegalStateException("The API of Java %s cannot be served by the JDK %s: %s".formatted(
-        release, javaHome, e.getMessage() != null ? e.getMessage() : e.toString()), e);
+      return null;
     }
   }
 

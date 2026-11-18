@@ -41,7 +41,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -123,7 +122,7 @@ class ASTParserReleaseIT {
   }
 
   @Test
-  void jdk_with_a_broken_ct_sym_is_an_error() throws IOException {
+  void jdk_with_a_broken_ct_sym_is_seen_as_is() throws IOException {
     Path home = Files.createDirectories(temp.resolve("jdk/lib"));
     Files.createSymbolicLink(home.resolve("jrt-fs.jar"), Path.of(System.getProperty("java.home"), "lib", "jrt-fs.jar"));
     Files.createSymbolicLink(home.resolve("modules"), Path.of(System.getProperty("java.home"), "lib", "modules"));
@@ -132,7 +131,7 @@ class ASTParserReleaseIT {
     Map<String, String> options = release("11");
     options.put(SystemReleaseClasspath.OPTION_JAVA_HOME, home.getParent().toString());
 
-    assertThatThrownBy(() -> parse(SOURCE, options, false)).isInstanceOf(IllegalStateException.class);
+    assertThat(unresolved(parse(SOURCE, options, false))).containsExactly(PACK200);
   }
 
   @Test

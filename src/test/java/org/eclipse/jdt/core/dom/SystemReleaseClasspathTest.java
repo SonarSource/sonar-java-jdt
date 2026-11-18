@@ -137,24 +137,19 @@ class SystemReleaseClasspathTest {
   }
 
   @Test
-  void throws_when_the_release_should_be_served_but_ecj_cannot_open_it() throws IOException {
+  void jdk_is_used_as_is_when_ecj_cannot_open_the_release() throws IOException {
     assumeRunningJdkCanServeOlderReleases();
-    String home = fakeJdk("21.0.2", true);
 
-    var options = options("11", home);
-    assertThatThrownBy(() -> SystemReleaseClasspath.resolveTargetRelease(options))
-      .isInstanceOf(IllegalStateException.class)
-      .hasMessageContaining("Java 11")
-      .hasMessageContaining(home);
+    // the ct.sym is not a valid archive
+    assertThatIsRunningJdkApi(SystemReleaseClasspath.resolveTargetRelease(options("11", fakeJdk("21.0.2", true))));
   }
 
   @Test
-  void throws_for_a_release_that_ct_sym_does_not_describe() throws IOException {
+  void jdk_is_used_as_is_for_a_release_that_ct_sym_does_not_describe() throws IOException {
     assumeRunningJdkCanServeOlderReleases();
-    var options = options("98", fakeJdkWithRunningCtSym("99"));
+
     // the release file of a JDK 99 on top of the ct.sym of the running one
-    assertThatThrownBy(() -> SystemReleaseClasspath.resolveTargetRelease(options))
-      .isInstanceOf(IllegalStateException.class);
+    assertThatIsRunningJdkApi(SystemReleaseClasspath.resolveTargetRelease(options("98", fakeJdkWithRunningCtSym("99"))));
   }
 
   private static void assumeRunningJdkCanServeOlderReleases() {
