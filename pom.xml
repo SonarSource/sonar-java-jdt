@@ -28,7 +28,7 @@
     -->
     <sonar.exclusions>src/main/java/org/eclipse/jdt/**</sonar.exclusions>
 
-    <version.junit.jupiter>5.11.3</version.junit.jupiter>
+    <version.junit.jupiter>5.14.4</version.junit.jupiter>
     <version.assertj>3.27.7</version.assertj>
     <jdk.min.version>21</jdk.min.version>
     <gitRepositoryName>sonar-java-jdt</gitRepositoryName>
