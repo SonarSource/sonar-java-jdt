@@ -1,0 +1,56 @@
+Subject: Preserve problem context and tolerate unreportable semantic problems
+
+Purpose: Avoid AbortCompilation when incomplete semantic resolution leaves a null
+ referenceContext, and prevent ProblemReporter.close() from clearing it too early.
+Tests: SonarJava semantic recovery and batch-analysis regression/sanity tests.
+
+diff --git a/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java b/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java
+--- a/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java
++++ b/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java
+@@ -129,15 +129,6 @@
+ 	 boolean mandatory = (severity & (ProblemSeverities.Error | ProblemSeverities.Optional)) == ProblemSeverities.Error;
+ 	 if ((severity & ProblemSeverities.InternalError) == 0 && this.policy.ignoreAllErrors()) {
+ 		 // Error is not to be exposed, but clients may need still notification as to whether there are silently-ignored-errors.
+-		 // if no reference context, we need to abort from the current compilation process
+-		 if (referenceContext == null) {
+-			 if ((severity & ProblemSeverities.Error) != 0) { // non reportable error is fatal
+-				 CategorizedProblem problem = this.createProblem(null, problemId, problemArguments, elaborationId, messageArguments, severity, 0, 0, 0, 0);
+-				 throw new AbortCompilation(null, problem);
+-			 } else {
+-				 return; // ignore non reportable warning
+-			 }
+-		 }
+ 		 return;
+ 	 }
+ 
+@@ -152,14 +143,9 @@
+ 		}
+ 	}
+ 
+-	// if no reference context, we need to abort from the current compilation process
++	// if no reference context, the problem cannot be reported: ignore it instead of aborting the compilation
+ 	if (referenceContext == null) {
+-		if ((severity & ProblemSeverities.Error) != 0) { // non reportable error is fatal
+-			CategorizedProblem problem = this.createProblem(null, problemId, problemArguments, elaborationId, messageArguments, severity, 0, 0, 0, 0);
+-			throw new AbortCompilation(null, problem);
+-		} else {
+-			return; // ignore non reportable warning
+-		}
++		return;
+ 	}
+ 
+ 	int[] lineEnds;
+diff --git a/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java b/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
+--- a/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
++++ b/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
+@@ -12442,6 +12442,6 @@
+  * </ul></ul>
+  */
+ public void close() {
+-	this.referenceContext = null;
+-}
+-}
+\ No newline at end of file
++	// Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
++}
++}

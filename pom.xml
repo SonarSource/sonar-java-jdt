@@ -146,6 +146,9 @@
                 <filter>
                   <artifact>org.eclipse.jdt:*</artifact>
                   <excludes>
+                    <exclude>org/eclipse/jdt/core/dom/ASTParser.class</exclude>
+                    <exclude>org/eclipse/jdt/core/dom/ASTParser$*.class</exclude>
+                    <exclude>org/eclipse/jdt/core/dom/ASTParser.java</exclude>
                     <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemHandler.class</exclude>
                     <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java</exclude>
                     <exclude>org/eclipse/jdt/internal/compiler/problem/ProblemReporter.class</exclude>

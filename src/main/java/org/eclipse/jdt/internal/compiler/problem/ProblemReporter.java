@@ -6835,8 +6835,8 @@ public void missingTypeInMethod(ASTNode astNode, MethodBinding method) {
 		missingType = problem.missingType;
 		problemId = IProblem.MissingTypeForInference;
 	} else {
-		// Disabled to fix failing sonar-java sanity test faling due to
-		// "wrongly tagged as containing missing types".
+		// Disabled: a sonar-java sanity test fails because of this assertion
+		// ("wrongly tagged as containing missing types").
 		// assert false : "The method " + method + " is wrongly tagged as containing missing types"; //$NON-NLS-1$ //$NON-NLS-2$
 		return;
 	}
@@ -12444,6 +12444,6 @@ public boolean scheduleProblemForContext(Runnable problemComputation) {
  * </ul></ul>
  */
 public void close() {
-  // Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
+	// Intentionally removed "this.referenceContext = null" which is called by mistake by ECJ 3.37.0
 }
 }

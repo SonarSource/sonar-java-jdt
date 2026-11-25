@@ -37,6 +37,10 @@ jobs:
           artifactory-deployer-role: qa-deployer     # Override default public-deployer
           sonar-platform: none
           maven-args: -Pcoverage
+      # Runs after build-maven, which exports the repox settings (SONARSOURCE_REPOSITORY_URL, ARTIFACTORY_ACCESS_TOKEN)
+      # so that missing artifacts are downloaded through repox instead of Maven Central.
+      - name: Verify ECJ patch series
+        run: python3 scripts/patchECJ.py check
       - name: Upload Maven build as pipeline artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -114,7 +118,7 @@ jobs:
       - name: Slack Notification
         uses: SonarSource/core-languages-tooling-public/common-actions/slack-notify@v1
         with:
-          slack-channel: squad-corelang-notifs
+          slack-channel: squad-jvm-community
           branch-patterns: ${{ format('{0},branch-*,dogfood-*', github.event.repository.default_branch) }}
           github-token: ${{ github.token }}
           branch: ${{ github.ref_name }}
