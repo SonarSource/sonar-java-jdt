@@ -29,6 +29,11 @@ jobs:
       - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         with:
           version: 2026.10.20
+      - uses: SonarSource/ci-github-actions/config-maven@v2
+        with:
+          artifactory-reader-role: private-reader
+      - name: Verify ECJ patch series
+        run: python3 scripts/patchECJ.py check
       - uses: SonarSource/ci-github-actions/build-maven@v2
         id: build-step
         with:
@@ -37,10 +42,6 @@ jobs:
           artifactory-deployer-role: qa-deployer     # Override default public-deployer
           sonar-platform: none
           maven-args: -Pcoverage
-      # Runs after build-maven, which exports the repox settings (SONARSOURCE_REPOSITORY_URL, ARTIFACTORY_ACCESS_TOKEN)
-      # so that missing artifacts are downloaded through repox instead of Maven Central.
-      - name: Verify ECJ patch series
-        run: python3 scripts/patchECJ.py check
       - name: Upload Maven build as pipeline artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
