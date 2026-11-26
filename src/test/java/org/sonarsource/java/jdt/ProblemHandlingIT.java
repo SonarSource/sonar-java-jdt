@@ -39,12 +39,13 @@ class ProblemHandlingIT {
 
   @Test
   void ignores_unreportable_errors_without_aborting_compilation() {
-    assertUnreportableErrorIsIgnored(DefaultErrorHandlingPolicies.proceedWithAllProblems());
+    assertUnreportableErrorIsIgnored(DefaultErrorHandlingPolicies.proceedWithAllProblems(), ProblemSeverities.Error);
   }
 
   @Test
   void ignores_unreportable_errors_under_the_ignore_all_policy() {
-    assertUnreportableErrorIsIgnored(DefaultErrorHandlingPolicies.ignoreAllProblems());
+    // Internal errors bypass the ignore-all policy's early return and reach the null-context guard.
+    assertUnreportableErrorIsIgnored(DefaultErrorHandlingPolicies.ignoreAllProblems(), ProblemSeverities.Error | ProblemSeverities.InternalError);
   }
 
   @Test
@@ -80,11 +81,11 @@ class ProblemHandlingIT {
     assertThatCode(() -> reporter.missingTypeInMethod(new MessageSend(), method)).doesNotThrowAnyException();
   }
 
-  private static void assertUnreportableErrorIsIgnored(IErrorHandlingPolicy policy) {
+  private static void assertUnreportableErrorIsIgnored(IErrorHandlingPolicy policy, int severity) {
     ProblemHandler handler = new ProblemHandler(policy, new CompilerOptions(), new DefaultProblemFactory());
 
     assertThatCode(() -> handler.handle(IProblem.UndefinedType, new String[]{"Missing"}, 0, new String[]{"Missing"},
-      ProblemSeverities.Error, 0, 1, null, null)).doesNotThrowAnyException();
+      severity, 0, 1, null, null)).doesNotThrowAnyException();
   }
 
   private static ProblemReporter newReporter() {
