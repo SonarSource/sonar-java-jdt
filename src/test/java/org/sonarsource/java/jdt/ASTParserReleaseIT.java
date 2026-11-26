@@ -41,13 +41,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Checks, through the real {@link ASTParser} of the shaded jar, that the patched {@code ASTParser#getClasspath()} gives
  * the API of the requested release to ECJ.
  *
- * <p>The API of a release is observed through two types of the JDK:
+ * <p>The API of a release is observed through three types of the JDK:
  * <ul>
  *   <li>{@code java.util.jar.Pack200}, which exists in Java 11 and was removed in Java 14;</li>
  *   <li>{@code java.lang.Record}, which was added in Java 16;</li>
@@ -76,8 +75,10 @@ class ASTParserReleaseIT {
 
   @BeforeAll
   static void requires_a_jdk_able_to_serve_older_releases() {
-    assumeTrue(new File(System.getProperty("java.home"), "lib/ct.sym").isFile(), "the running JVM has no lib/ct.sym");
-    assumeTrue(Runtime.version().feature() > 17, "the running JVM must be newer than Java 17");
+    assertThat(new File(System.getProperty("java.home"), "lib/ct.sym"))
+      .as("release API verification requires a JDK with lib/ct.sym")
+      .isFile();
+    assertThat(Runtime.version().feature()).as("release API verification requires a JDK newer than Java 17").isGreaterThan(17);
   }
 
   @Test
@@ -139,7 +140,6 @@ class ASTParserReleaseIT {
 
   @Test
   void classpath_of_the_project_is_kept() throws IOException {
-    assumeTrue(ToolProvider.getSystemJavaCompiler() != null, "no Java compiler available");
     Path library = compileLibrary();
     String source = """
       class Example {
@@ -223,6 +223,7 @@ class ASTParserReleaseIT {
     Path classes = Files.createDirectories(temp.resolve("library-classes"));
     Path file = Files.writeString(sources.resolve("Library.java"), "package library; public class Library { }\n");
     JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+    assertThat(compiler).as("classpath verification requires a JDK compiler").isNotNull();
     int result = compiler.run(null, null, null, "-d", classes.toString(), file.toString());
     assertThat(result).isZero();
     return classes;
