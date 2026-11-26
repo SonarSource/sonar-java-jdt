@@ -1,0 +1,20 @@
+Subject: Tolerate methods incorrectly tagged as containing missing types
+
+Purpose: Let analysis of non-compiling sources continue when a method is marked
+ as containing missing types but no missing type can be collected.
+Tests: SonarJava parser sanity tests on non-compiling sources.
+
+diff --git a/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java b/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
+--- a/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
++++ b/src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java
+@@ -6835,7 +6835,9 @@
+ 		missingType = problem.missingType;
+ 		problemId = IProblem.MissingTypeForInference;
+ 	} else {
+-		assert false : "The method " + method + " is wrongly tagged as containing missing types"; //$NON-NLS-1$ //$NON-NLS-2$
++		// Disabled: a sonar-java sanity test fails because of this assertion
++		// ("wrongly tagged as containing missing types").
++		// assert false : "The method " + method + " is wrongly tagged as containing missing types"; //$NON-NLS-1$ //$NON-NLS-2$
+ 		return;
+ 	}
+ 	if (method instanceof ProblemMethodBinding problem) {

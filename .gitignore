@@ -1,6 +1,9 @@
 # Maven
 target/
 
+# Python maintenance tools
+__pycache__/
+
 # IntelliJ IDEA
 *.iws
 *.iml

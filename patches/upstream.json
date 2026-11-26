@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "artifacts": {
+    "org.eclipse.jdt.core": {
+      "version": "3.47.0",
+      "pomSha256": "d841643a8f8f7c9dd7ef620c0f5f8410bec3972cbf4681d57619468fa0ef05b9",
+      "sourcesSha256": "ab81af3f5e72769aded99c9f1c38b1d6be72519bc48c16b0c8a8e9819b62da52"
+    },
+    "ecj": {
+      "version": "3.46.100",
+      "pomSha256": "50a270320ca657880652701a48fe566210bc1a97bd833fdd888b5e341867c083",
+      "sourcesSha256": "e27368e8dd83da80575cd5dfd50f60078fb638b69a10e427284686c2eaa34e1c"
+    }
+  },
+  "files": [
+    {
+      "artifact": "ecj",
+      "source": "org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java",
+      "destination": "src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemHandler.java"
+    },
+    {
+      "artifact": "ecj",
+      "source": "org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java",
+      "destination": "src/main/java/org/eclipse/jdt/internal/compiler/problem/ProblemReporter.java"
+    },
+    {
+      "artifact": "org.eclipse.jdt.core",
+      "source": "org/eclipse/jdt/core/dom/ASTParser.java",
+      "destination": "src/main/java/org/eclipse/jdt/core/dom/ASTParser.java"
+    }
+  ]
+}
