@@ -108,7 +108,6 @@ with `ARTIFACTORY_ACCESS_TOKEN` (and `ARTIFACTORY_USERNAME`) over HTTPS only; us
 repository, so a corrupted or tampered local copy cannot become the new baseline. With `--offline` this verification is impossible and
 the tool prints a warning. `check` additionally verifies that the `maven-shade-plugin` filter for `org.eclipse.jdt:*` in `pom.xml`
 excludes the `.class` and `.java` files of every replacement source, so the shaded jar cannot contain the unpatched upstream classes.
-Unit tests of the tool run with `python3 -I -m unittest discover scripts`.
 
 An update proceeds in a temporary workspace:
 

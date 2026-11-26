@@ -5,6 +5,7 @@ import argparse
 import base64
 import difflib
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -69,6 +70,20 @@ def read_series(directory):
     return names
 
 
+def change_series(directory, *, add=None, remove=None):
+    """Edit patch entries while preserving comments and formatting on other lines."""
+    path = directory / "series"
+    data = path.read_bytes()
+    if remove is not None:
+        data = "".join(line for line in data.decode("utf-8").splitlines(keepends=True)
+                       if line.split("#", 1)[0].strip() != remove).encode("utf-8")
+    if add is not None:
+        if data and not data.endswith((b"\n", b"\r")):
+            data += b"\n"
+        data += add.encode("utf-8") + b"\n"
+    path.write_bytes(data)
+
+
 def validate_manifest(manifest):
     if manifest.get("schemaVersion") != 1 or set(manifest["artifacts"]) != {CORE, "ecj"}:
         raise PatchError("Unsupported upstream manifest")
@@ -122,7 +137,7 @@ def download(url, authorization=None):
             if error.code != 429 and error.code < 500:
                 raise PatchError(f"Cannot download {url}: HTTP {error.code}") from error
             failure = f"HTTP {error.code}"
-        except (urllib.error.URLError, TimeoutError) as error:
+        except (OSError, http.client.HTTPException) as error:
             failure = str(error)
         if delay is None:
             raise PatchError(f"Cannot download {url} after {len(RETRY_DELAYS) + 1} attempts: {failure}")
@@ -310,10 +325,14 @@ def make_patch(before, after, description):
     for name in sorted(before):
         if before[name] == after[name]:
             continue
+        try:
+            # Git patches delimit lines only with LF; other separators are source content.
+            before_lines = io.StringIO(before[name].decode("utf-8"), newline="\n").readlines()
+            after_lines = io.StringIO(after[name].decode("utf-8"), newline="\n").readlines()
+        except UnicodeDecodeError as error:
+            raise PatchError(f"Cannot generate patch for {name}: source is not valid UTF-8") from error
         changes.append(f"diff --git a/{name} b/{name}\n")
-        for line in difflib.unified_diff(before[name].decode().splitlines(keepends=True),
-                                         after[name].decode().splitlines(keepends=True),
-                                         fromfile="a/" + name, tofile="b/" + name):
+        for line in difflib.unified_diff(before_lines, after_lines, fromfile="a/" + name, tofile="b/" + name):
             changes.append(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n")
     return (description + "".join(changes)).encode() if changes else None
 
@@ -404,7 +423,7 @@ def finish(stage, state):
         if read_tree(verification, paths) != read_work(stage, paths):
             raise PatchError("Staged sources do not match the refreshed patch series")
     updates = read_work(stage, paths)
-    updates.update({MANIFEST: json_bytes(state["manifest"]), SERIES: ("\n".join(names) + "\n").encode(),
+    updates.update({MANIFEST: json_bytes(state["manifest"]), SERIES: (stage / SERIES).read_bytes(),
                     "pom.xml": (stage / "pom.xml").read_bytes()})
     for name in set(names) | set(state["originalNames"]):
         updates["patches/" + name] = (stage / "patches" / name).read_bytes() if name in names else None
@@ -423,7 +442,7 @@ def refresh_pending(stage, state, drop=False):
             raise PatchError(f"{name} has no staged changes. Resolve it before continuing, or explicitly use 'continue --drop WORKSPACE' to remove it.")
         patch.unlink()
         state["names"].remove(name)
-        (stage / SERIES).write_text("\n".join(state["names"]) + "\n", encoding="utf-8")
+        change_series(stage / "patches", remove=name)
         print(f"Removed empty patch {name}")
     else:
         if drop:
@@ -473,7 +492,7 @@ def start(root, args):
                 raise PatchError("New patch must have a simple filename ending in .patch")
             names.append(edit)
             (stage / "patches" / edit).write_text(f"Subject: Describe {edit}\n\nPurpose: Explain the fix and relevant upstream context.\nTests: List relevant regression tests.\n\n", encoding="utf-8")
-            (stage / SERIES).write_text("\n".join(names) + "\n", encoding="utf-8")
+            change_series(stage / "patches", add=edit)
         (stage / "pom.xml").write_bytes(replace_version((root / "pom.xml").read_bytes(), target_manifest["artifacts"][CORE]["version"]))
         state = {"schemaVersion": 1, "root": str(root), "manifest": target_manifest,
                  "paths": list(files), "names": names, "index": 0, "pending": None,
