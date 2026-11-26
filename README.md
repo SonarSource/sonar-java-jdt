@@ -43,6 +43,12 @@ To update ECJ (Eclipse Compiler for Java), you usually need the `eclipse.jdt.cor
     Check that tag exists in the `eclipse.jdt.core` repository. You can check the available tags directly [here](https://github.com/eclipse-jdt/eclipse.jdt.core).
 3. **Update `org.eclipse.jdt.core` version and reapply the patches:** the script `overrideECJ.sh` can take care of these steps.
 
+### License headers
+
+Files in `src/main/java` that override an ECJ class must keep their original Eclipse license header, and files that we
+wrote ourselves must not carry it (we do not license our own work to ECJ). Both rules are enforced at build time by
+`EclipseLicenseHeaderTest`: a class is considered overridden when it also exists in the `org.eclipse.jdt.core` jar.
+
 ### Update on sonar-java
 Once we have a branch of `sonar-java-jdt` with the new version, we can test that version on sonar-java, either using a
 `SNAPSHOT` version when installed locally, or a build version when there is a PR on `sonar-java-jdt`.
