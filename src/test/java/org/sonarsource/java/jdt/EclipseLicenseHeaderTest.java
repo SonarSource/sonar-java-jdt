@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -52,6 +53,8 @@ class EclipseLicenseHeaderTest {
      */
     """;
 
+  private static final Pattern ECJ_JAR_NAME = Pattern.compile("(org\\.eclipse\\.jdt\\.core|ecj)-[0-9].*\\.jar");
+
   @TempDir
   Path tmp;
 
@@ -63,7 +66,7 @@ class EclipseLicenseHeaderTest {
     int overriding = 0;
     try (Stream<Path> files = Files.walk(sources)) {
       for (Path file : files.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
-        boolean overrides = overridesEcjClass(sources.relativize(file));
+        boolean overrides = overridesEcjClass(toClassResource(sources.relativize(file)));
         if (overrides) {
           overriding++;
         }
@@ -111,14 +114,54 @@ class EclipseLicenseHeaderTest {
     assertThat(EclipseLicenseHeader.violations(write("package a;\nclass A {}\n"), false)).isEmpty();
   }
 
+  @Test
+  void class_from_jdt_core_jar_is_overridden() throws IOException {
+    assertThat(overridesEcjClass("org/eclipse/jdt/core/dom/ASTParser.class")).isTrue();
+  }
+
+  @Test
+  void class_from_ecj_jar_is_overridden() throws IOException {
+    assertThat(overridesEcjClass("org/eclipse/jdt/internal/compiler/problem/ProblemReporter.class")).isTrue();
+    assertThat(overridesEcjClass("org/eclipse/jdt/internal/compiler/problem/ProblemHandler.class")).isTrue();
+  }
+
+  @Test
+  void class_of_this_project_is_not_overridden() throws IOException {
+    assertThat(overridesEcjClass("org/eclipse/jdt/core/dom/SystemReleaseClasspath.class")).isFalse();
+  }
+
+  @Test
+  void class_from_an_unrelated_jar_is_not_overridden() throws IOException {
+    assertThat(EclipseLicenseHeaderTest.class.getClassLoader().getResource("org/junit/jupiter/api/Test.class")).isNotNull();
+    assertThat(overridesEcjClass("org/junit/jupiter/api/Test.class")).isFalse();
+  }
+
+  @Test
+  void unknown_class_is_not_overridden() throws IOException {
+    assertThat(overridesEcjClass("org/eclipse/jdt/core/dom/DoesNotExist.class")).isFalse();
+  }
+
   /**
-   * A class is overridden when a copy of it exists in a jar of the classpath: our own classes are in target/classes,
-   * so any copy coming from a jar is the one from org.eclipse.jdt.core.
+   * A class is overridden when a copy of it exists in the jar of ECJ: our own classes are in target/classes, so a copy
+   * coming from one of these jars is the original one. The internal compiler classes are not in org.eclipse.jdt.core
+   * but in org.eclipse.jdt:ecj, a transitive dependency. Copies in any other jar are unrelated.
    */
-  private static boolean overridesEcjClass(Path javaFile) throws IOException {
-    String resource = javaFile.toString().replace('\\', '/').replaceAll("\\.java$", ".class");
-    List<URL> urls = Collections.list(EclipseLicenseHeaderTest.class.getClassLoader().getResources(resource));
-    return urls.stream().anyMatch(url -> "jar".equals(url.getProtocol()));
+  static boolean overridesEcjClass(String classResource) throws IOException {
+    List<URL> urls = Collections.list(EclipseLicenseHeaderTest.class.getClassLoader().getResources(classResource));
+    return urls.stream().anyMatch(EclipseLicenseHeaderTest::isEcjJar);
+  }
+
+  private static boolean isEcjJar(URL url) {
+    if (!"jar".equals(url.getProtocol())) {
+      return false;
+    }
+    String jarPath = url.getPath().substring(0, url.getPath().indexOf("!/"));
+    String jarName = jarPath.substring(jarPath.lastIndexOf('/') + 1);
+    return ECJ_JAR_NAME.matcher(jarName).matches();
+  }
+
+  private static String toClassResource(Path javaFile) {
+    return javaFile.toString().replace('\\', '/').replaceAll("\\.java$", ".class");
   }
 
   private Path write(String content) throws IOException {
