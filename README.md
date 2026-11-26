@@ -180,7 +180,12 @@ mvn verify
 
 CI runs the reconstruction check before the Maven build. Reconstruction detects missing patches, dependency
 or baseline drift, and source changes that were not recorded in a patch. It does not replace behavioral tests or downstream validation.
-The Maven integration tests exercise the shaded JAR, including the replacement `ASTParser`, after packaging.
+The Maven integration tests run after packaging and verify that the compiler and replacement classes are loaded from the
+shaded JAR with assertions enabled. They compile and execute valid Java code, reject invalid code with expected diagnostics,
+exercise the problem-context and missing-type fixes, and check that batch parsing delivers every AST while preserving known
+type bindings despite unresolved types. Release API and projectless classpath behavior are also covered. These checks run
+with `mvn verify`; `mvn package` alone does not execute them. Release API verification requires a full JDK with `lib/ct.sym`
+and a Java compiler, and fails if these prerequisites are missing. Test reports are written to `target/failsafe-reports`.
 
 ### Update on sonar-java
 Once we have a branch of `sonar-java-jdt` with the new version, we can test that version on sonar-java, either using a
