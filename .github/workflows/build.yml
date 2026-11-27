@@ -32,8 +32,8 @@ jobs:
       - uses: SonarSource/ci-github-actions/config-maven@v2
         with:
           artifactory-reader-role: private-reader
-      - name: Verify ECJ patch series
-        run: python3 scripts/patchECJ.py check
+      - name: Verify JDT patch series
+        run: python3 scripts/patchJDT.py check
       - uses: SonarSource/ci-github-actions/build-maven@v2
         id: build-step
         with:

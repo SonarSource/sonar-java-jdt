@@ -19,7 +19,7 @@ To learn more about Sonar’s Java analysis, visit the [Sonar website](https://w
 
 <!-- sonar-marketing:end -->
 
-This repository exists because we need to patch some files from eclipse JDT to fix some issues, but we can only do this in a repository with the same license as Eclipse.
+This repository exists because we need to patch some files from Eclipse JDT to fix some issues, but we can only do this in a repository with the same license as Eclipse.
 When a new version of JDT is released, we update the dependency and reapply the complete ordered patch series in `patches/series`.
 
 ## License
@@ -28,7 +28,7 @@ When a new version of JDT is released, we update the dependency and reapply the 
 
 ## Maintenance tool
 
-[scripts/patchECJ.py](scripts/patchECJ.py) is the command-line tool for maintaining SonarJava's changes to Eclipse JDT.
+[scripts/patchJDT.py](scripts/patchJDT.py) is the command-line tool for maintaining SonarJava's changes to Eclipse JDT.
 It keeps the upstream dependency, the patches, and the patched Java sources consistent when upgrading JDT or changing a fix.
 
 Most of JDT is packaged directly from Maven dependencies. This repository also contains complete copies of a few upstream classes:
@@ -61,12 +61,10 @@ as ordinary project source; they are preserved during upgrades and are not recon
 
 The baseline comes from published Maven source JARs, so it corresponds to the binaries being packaged. The tool reads the ECJ
 version from JDT Core's published POM; the two versions can differ (for example, JDT Core `3.47.0` uses ECJ `3.46.100`).
-Eclipse release tags such as `R4_41` remain useful for browsing upstream changes. Reapplying the patches requires neither selecting
-historical override commits nor keeping a checkout of the Eclipse repository.
 
 Run the tool with Python 3.9+ and Git installed. The examples below assume the repository root as the working directory:
 
-| Command after `python3 scripts/patchECJ.py` | What it does |
+| Command after `python3 scripts/patchJDT.py` | What it does |
 | --- | --- |
 | `check` | Verifies the current dependency version, pinned artifact checksums, patch list, and exact reconstruction of the replacement sources. Leaves project files untouched. |
 | `update VERSION` | Prepares the given JDT Core release, reapplies and refreshes all patches, then writes the verified sources, patches, baseline metadata, and dependency version back to the project. |
@@ -74,7 +72,7 @@ Run the tool with Python 3.9+ and Git installed. The examples below assume the r
 | `continue WORKSPACE` | Regenerates the pending patch from the edited workspace sources, applies the remaining patches, and writes the complete result back after verification. |
 | `continue --drop WORKSPACE` | Explicitly removes an empty pending patch, for example when upstream has incorporated the fix, and resumes the remaining patches. |
 
-Run `python3 scripts/patchECJ.py --help` for the command list, or add `--help` after a command for its options.
+Run `python3 scripts/patchJDT.py --help` for the command list, or add `--help` after a command for its options.
 The tool changes working-tree files; Git staging, commits, and pushes remain manual. Building the package and validating it in
 SonarJava are separate steps described below. Ordinary Maven builds do not run the maintenance tool; CI runs its reconstruction
 check before building.
@@ -90,10 +88,10 @@ Compare the `org.eclipse.jdt:org.eclipse.jdt.core` version in [pom.xml](pom.xml)
 
 ```bash
 # Verify the existing dependency, baseline checksums, complete patch series, and generated sources.
-python3 scripts/patchECJ.py check
+python3 scripts/patchJDT.py check
 
 # Replace 3.47.0 with the target published JDT Core release.
-python3 scripts/patchECJ.py update 3.47.0
+python3 scripts/patchJDT.py update 3.47.0
 ```
 
 Both commands first read artifacts from `~/.m2/repository`, and download missing ones into a temporary workspace, retrying transient
@@ -102,7 +100,7 @@ failures (network errors, HTTP 429 and 5xx) up to three times. Downloads come fr
 with `ARTIFACTORY_ACCESS_TOKEN` (and `ARTIFACTORY_USERNAME`) over HTTPS only; use `--repository-url URL` to select another repository
 (credentials are never sent to it). The tool never writes to the local Maven repository. Use `--offline` to require cached artifacts, or
 `--maven-repo PATH` to select a different local repository. These options follow the command, for example
-`python3 scripts/patchECJ.py check --offline`.
+`python3 scripts/patchJDT.py check --offline`.
 
 `update` also compares every artifact it is about to pin (including cached ones) with the `.sha1` files published next to it in the
 repository, so a corrupted or tampered local copy cannot become the new baseline. With `--offline` this verification is impossible and
@@ -133,7 +131,7 @@ the pending patch. Application uses `git apply --check` before `git apply`, with
 4. Resume with:
 
 ```bash
-python3 scripts/patchECJ.py continue WORKSPACE
+python3 scripts/patchJDT.py continue WORKSPACE
 ```
 
 Printed continuation commands use the current Python interpreter and absolute paths, so they can be run from any directory.
@@ -141,11 +139,149 @@ The tool refreshes only the pending patch and then applies the remaining patches
 If upstream has incorporated a patch completely, leave `work/` identical to `before/` for that step and explicitly remove it with:
 
 ```bash
-python3 scripts/patchECJ.py continue --drop WORKSPACE
+python3 scripts/patchJDT.py continue --drop WORKSPACE
 ```
 
 An empty pending patch is otherwise an error, so accidentally continuing an unresolved conflict cannot silently discard a fix.
 To abandon a staged update, discard its temporary workspace; project files are updated only after all patches have been resolved and verified.
+
+### Develop and test upstream JDT locally
+
+A second tool, `scripts/localJDT.py`, supports developing and testing upstream JDT locally.
+
+The two tools in `scripts/` have separate responsibilities:
+
+| Tool | Responsibility |
+| --- | --- |
+| `scripts/localJDT.py` | Clone JDT, select a branch, build its working tree, and run tests. |
+| `scripts/patchJDT.py` | Obtain released or locally built artifacts, maintain/apply our patches, and build and test the shaded package. |
+
+Install Python 3.9+, Git, and Maven. The current `BETA_JAVA28` branch requires Java 25
+or newer; set `JAVA_HOME` accordingly. Packaging published releases normally needs
+Java 21 or newer. The commands below run from this repository root, but script paths
+and workspaces are resolved relative to the scripts, independently of your current directory.
+
+#### Clone, build, and iterate on an upstream fix
+
+```bash
+# Clone and create a local tracking branch, without building:
+python3 scripts/localJDT.py checkout BETA_JAVA28
+
+# Build the branch, including local commits and uncommitted changes:
+python3 scripts/localJDT.py build BETA_JAVA28 --java-home "$JAVA_HOME"
+
+# After editing the checkout, rebuild its current branch or detached revision:
+python3 scripts/localJDT.py build --java-home "$JAVA_HOME"
+```
+
+The checkout is in `workdir/local-jdt/eclipse.jdt.core`. Existing local branches and edits
+are preserved. Normal Git checkout rules protect changes when switching branches;
+the tool never resets, rebases, cleans, stashes, or automatically detaches the checkout.
+An existing local branch is not automatically fetched or updated. `checkout --fetch`
+fetches remote references without merging or moving local branches. Choose how to
+incorporate upstream changes using Git inside the checkout.
+
+Edit sources and add regression tests directly in that checkout. To run a targeted
+upstream compiler regression suite:
+
+```bash
+python3 scripts/localJDT.py test \
+  --test org.eclipse.jdt.core.tests.compiler.regression.ConditionalExpressionTest \
+  --compliance 25 --java-home "$JAVA_HOME"
+```
+
+`--test` also accepts `Class#method` where supported by the upstream runner. Use
+`--module` to select another test module inside the checkout. The build skips upstream
+tests; the `test` command runs them explicitly. It uses the same private Maven repository
+as the build, so build first to install the needed local artifacts.
+
+Both tools accept `--java-home /absolute/path/to/jdk` on build/test/package commands.
+This is useful when Python version-manager shims overwrite `JAVA_HOME`. For ordinary
+release-maintenance commands (`check`, `edit`, `update`, `continue`), no Java invocation is needed.
+
+JDT builds use `scripts/jdt-settings.xml` and `workdir/local-jdt/m2`, preserving artifacts
+in `~/.m2/repository`. The first build may download dependencies again. Each run retains
+a `workdir/local-jdt/build-*/` directory with `build.log`, `build.json`, and immutable
+copies of the Core/compiler-batch binaries, matching source JARs, and POMs. The build
+record captures the revision, working-tree status, input hashes, artifact coordinates,
+and checksums. It is the interface between the two scripts; packaging never invokes
+`localJDT.py` or accesses the live checkout. Upstream test logs are retained under
+`workdir/local-jdt/test-*/tests.log`.
+
+#### Package and test a captured local build
+
+Use the build directory printed by `localJDT.py`:
+
+```bash
+python3 scripts/patchJDT.py package \
+  --local-build workdir/local-jdt/build-EXAMPLE \
+  --java-home "$JAVA_HOME"
+```
+
+A path to its `build.json` is also accepted. This reuses the captured artifacts without
+rebuilding or changing JDT, even if the checkout or its Maven cache has since changed.
+Missing artifacts, altered checksums, or source JARs that disagree with recorded build
+inputs are rejected. Further upstream edits require a new local build record.
+
+To test packaging directly against a published Core version instead:
+
+```bash
+python3 scripts/patchJDT.py package --version 3.47.0 --java-home "$JAVA_HOME"
+```
+
+The release path obtains matching Core and ECJ binaries, source JARs, and POMs, resolving
+the ECJ version from Core's POM. `--repository-url`, `--maven-repo`, and `--offline` are
+available. Online downloads verify published checksums; offline mode requires cached
+artifacts and Maven plugins/dependencies and cannot verify newly selected bytes remotely.
+The pinned release's source/POM checksums are checked even offline.
+
+Packaging runs in `workdir/patched-jdt/package-*/`, with its own Maven repository at
+`workdir/patched-jdt/m2` by default. The captured artifacts are installed there, rather
+than into your normal Maven repository. An explicit `--maven-repo` overrides that cache.
+
+The command copies the packaging project, including local helpers in `src/main` and
+repository tests. It regenerates the managed replacement classes from the selected
+upstream source JARs plus `patches/series`, then configures a temporary dependency POM
+while preserving tests and shading exclusions. Maven compiles and shades the package
+and runs its unit and integration tests against the resulting JAR. This detects both
+patch-application conflicts and behavior or compilation incompatibilities.
+
+The source repository's POM, checked-in replacement sources, tests, patch series, and
+release baseline remain unchanged. The resulting package is not installed or deployed.
+The release-maintenance commands above still explicitly update working-tree sources
+and patches when requested.
+
+Each packaging workspace retains:
+
+- `input.json` and `artifacts/`: the selected baseline, checksums, and frozen inputs;
+- `pristine/` and `before/`: managed sources before patching and before the pending patch;
+- `packaging/`: the isolated project, shaded JAR, and test reports under `target/`;
+- `packaging.json`: patch progress, conflict resolutions, dependencies, and final status;
+- `install.log`, `dependencies.log`, and `packaging.log`: Maven output.
+
+The local baseline is recorded separately from the tracked release-only
+`patches/upstream.json`. Do not run release `check` against the experimental overlay or
+copy its POM back into this repository.
+
+#### Resolve an experimental packaging conflict
+
+Inspect the named patch in `WORKSPACE/packaging/patches/` and edit the affected Java
+files under `WORKSPACE/packaging/src/`. Then continue:
+
+```bash
+python3 scripts/patchJDT.py continue-package WORKSPACE --java-home "$JAVA_HOME"
+```
+
+Only the pending patch in that workspace is refreshed, then later patches are applied
+and the shaded package is rebuilt and tested. If upstream already contains the fix,
+leave that step's sources identical to `before/` and explicitly drop it from the
+experimental series with `continue-package WORKSPACE --drop`.
+
+The same continuation command retries a failed packaging build after fixing staged
+helpers or configuration. If an offline run lacks dependencies, add `--online` to the
+continuation command to allow Maven downloads; `--offline` forces cached resolution. Frozen artifacts and pristine sources are verified before
+reuse. Repository patches are never published by these experimental commands. Keep
+permanent packaging fixes through the normal `edit` / `continue` maintenance workflow.
 
 ### Maintaining patches
 
@@ -157,9 +293,9 @@ POMs and source JARs, and the mapping from upstream sources to local replacement
 Maintain existing patches through a temporary edit session:
 
 ```bash
-python3 scripts/patchECJ.py edit 0004-select-system-release-api.patch
+python3 scripts/patchJDT.py edit 0004-select-system-release-api.patch
 # Edit the files under the printed WORKSPACE/work/ and, if needed, the patch description.
-python3 scripts/patchECJ.py continue WORKSPACE
+python3 scripts/patchJDT.py continue WORKSPACE
 ```
 
 For a new behavior, pass a new patch filename to `edit`; it is appended after all existing patches. Supply a meaningful patch header
@@ -174,7 +310,7 @@ exclusions before starting a patch edit session. This makes the new file part of
 Before submitting a change, run:
 
 ```bash
-python3 scripts/patchECJ.py check
+python3 scripts/patchJDT.py check
 mvn verify
 ```
 

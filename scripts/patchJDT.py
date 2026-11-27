@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintain Eclipse replacement sources using an ordered, history-independent patch series."""
+"""Maintain JDT patches and build shaded packages from published or local JDT artifacts."""
 
 import argparse
 import base64
@@ -23,10 +23,15 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 import zipfile
 
+from common import WorkflowError, check_jdk, maven, run, save_json, select_jdk
+
 
 ROOT = Path(__file__).resolve().parents[1]
 NS = {"m": "http://maven.apache.org/POM/4.0.0"}
 CORE = "org.eclipse.jdt.core"
+BATCH = "org.eclipse.jdt.core.compiler.batch"
+SOURCE_ROOTS = {CORE: CORE + "/dom/", "ecj": BATCH + "/src/"}
+EXCLUDES = "org.eclipse.platform:org.eclipse.core.filesystem,org.eclipse.platform:org.eclipse.core.expressions,org.eclipse.platform:org.eclipse.equinox.registry,org.eclipse.platform:org.eclipse.equinox.app,net.java.dev.jna:jna,org.eclipse.platform:org.eclipse.core.commands"
 MANIFEST = "patches/upstream.json"
 SERIES = "patches/series"
 VERSION = re.compile(r"\d+\.\d+\.\d+")
@@ -383,7 +388,7 @@ def publish(root, updates):
             path = root / name
             originals[name] = path.read_bytes() if path.exists() else None
             if data is not None:
-                descriptor, temporary = tempfile.mkstemp(prefix=".ecj-", dir=path.parent)
+                descriptor, temporary = tempfile.mkstemp(prefix=".jdt-", dir=path.parent)
                 prepared[name] = Path(temporary)
                 with os.fdopen(descriptor, "wb") as output:
                     output.write(data)
@@ -415,7 +420,7 @@ def finish(stage, state):
     ensure_unchanged(root, state)
     names = read_series(stage / "patches")
     paths = state["paths"]
-    with tempfile.TemporaryDirectory(prefix="ecj-verify-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="jdt-verify-") as temporary:
         verification = Path(temporary)
         write_tree(verification, read_tree(stage / "base", paths))
         for name in names:
@@ -476,7 +481,7 @@ def advance(stage, state, edit=None, new_patch=None):
 
 
 def start(root, args):
-    stage = Path(tempfile.mkdtemp(prefix="ecj-update-"))
+    stage = Path(tempfile.mkdtemp(prefix="jdt-update-"))
     try:
         artifacts = make_artifacts(args, stage / "downloads")
         manifest, _, names = check(root, artifacts, stage / "current")
@@ -508,6 +513,302 @@ def start(root, args):
         raise
 
 
+def artifact_path(workspace, metadata, suffix):
+    return workspace / safe_path(metadata['paths'][suffix])
+
+
+def freeze_artifact(workspace, name, metadata, sources):
+    if metadata.get('groupId') != 'org.eclipse.jdt' or metadata.get('artifactId') != name:
+        raise PatchError(f'Unexpected artifact coordinates: {name}')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+', metadata.get('version', '')):
+        raise PatchError(f'Expected a literal artifact version: {name}')
+    target = {'groupId': 'org.eclipse.jdt', 'artifactId': name, 'version': metadata['version'], 'paths': {}, 'sha256': {}}
+    directory = workspace / 'artifacts' / name
+    directory.mkdir(parents=True)
+    for suffix in ('.pom', '.jar', '-sources.jar'):
+        data = sources[suffix]
+        path = directory / (name + '-' + metadata['version'] + suffix)
+        path.write_bytes(data)
+        target['paths'][suffix] = path.relative_to(workspace).as_posix()
+        target['sha256'][suffix] = digest(data)
+    pom = ET.fromstring(sources['.pom'])
+    if (pom.findtext('m:artifactId', namespaces=NS) != name
+            or pom.findtext('m:version', namespaces=NS) != metadata['version']):
+        raise PatchError(f'Artifact POM disagrees with build coordinates: {name}')
+    return target
+
+
+def local_package_input(root, workspace, build_record):
+    path = build_record.resolve()
+    if path.is_dir():
+        path /= 'build.json'
+    record = read_json(path)
+    # Accept records from the previous helper as well as the portable schema-1 records.
+    if record.get('schemaVersion', 1) != 1 or record.get('status') != 'built':
+        raise PatchError('Local input must be a successful localJDT.py build record')
+    if set(record['artifacts']) != {CORE, BATCH}:
+        raise PatchError('Local build must contain matching Core and compiler-batch artifacts')
+    manifest = read_json(root / MANIFEST)
+    validate_manifest(manifest)
+    artifacts = {}
+    for name, metadata in record['artifacts'].items():
+        sources = {}
+        for suffix in ('.pom', '.jar', '-sources.jar'):
+            source = Path(metadata['paths'][suffix])
+            source = source if source.is_absolute() else path.parent / safe_path(source.as_posix())
+            data = source.read_bytes()
+            if digest(data) != metadata['sha256'][suffix]:
+                raise PatchError(f'Local build artifact checksum mismatch: {source}')
+            sources[suffix] = data
+        artifacts[name] = freeze_artifact(workspace, name, metadata, sources)
+    files = {}
+    mapping = {CORE: CORE, 'ecj': BATCH}
+    for entry in manifest['files']:
+        archive = artifact_path(workspace, artifacts[mapping[entry['artifact']]], '-sources.jar')
+        with zipfile.ZipFile(archive) as sources:
+            data = sources.read(entry['source'])
+        source = SOURCE_ROOTS[entry['artifact']] + entry['source']
+        if digest(data) != record['input']['files'].get(source):
+            raise PatchError(f'Built source archive differs from recorded working-tree input: {source}')
+        files[entry['destination']] = data
+    return {'kind': 'local', 'buildRecord': str(path), 'revision': record['input'].get('commit'),
+            'workingTreeStatus': record['input'].get('status'), 'artifacts': artifacts, 'artifactMap': mapping}, files
+
+
+def release_package_input(root, workspace, args, repository):
+    artifacts = Artifacts(repository, workspace / 'downloads', args.offline, *select_repository(args.repository_url))
+    manifest = read_json(root / MANIFEST)
+    validate_manifest(manifest)
+    pinned = manifest['artifacts'][CORE]['version'] == args.version
+    target, files = baseline(manifest, artifacts, None if pinned else args.version)
+    captured = {}
+    for name, metadata in target['artifacts'].items():
+        sources = {suffix: artifacts.get(name, metadata['version'], suffix) for suffix in ('.pom', '.jar', '-sources.jar')}
+        if not args.offline:
+            artifacts.verify(name, metadata['version'], '.jar', sources['.jar'])
+        captured[name] = freeze_artifact(workspace, name,
+            {'groupId': 'org.eclipse.jdt', 'artifactId': name, 'version': metadata['version']}, sources)
+    return {'kind': 'release', 'version': args.version, 'binaryVerifiedAgainstRepository': not args.offline,
+            'manifest': target, 'artifacts': captured,
+            'artifactMap': {CORE: CORE, 'ecj': 'ecj'}}, files
+
+
+def verify_package_input(workspace, state):
+    if state.get('schemaVersion') != 1:
+        raise PatchError('Unsupported packaging workspace schema')
+    for metadata in state['source']['artifacts'].values():
+        for suffix, checksum in metadata['sha256'].items():
+            path = artifact_path(workspace, metadata, suffix)
+            if digest(path.read_bytes()) != checksum:
+                raise PatchError(f'Captured artifact checksum mismatch: {path}')
+    for name, checksum in state['pristineSha256'].items():
+        safe_path(name)
+        if digest((workspace / 'pristine' / name).read_bytes()) != checksum:
+            raise PatchError(f'Captured baseline checksum mismatch: {name}')
+
+
+def stage_project(root, workspace):
+    project = workspace / 'packaging'
+    project.mkdir()
+    for name in ('pom.xml', 'src', 'patches', 'LICENSE', 'NOTICE.txt', 'README.md', '.mvn'):
+        source = root / name
+        if source.is_dir():
+            shutil.copytree(source, project / name)
+        elif source.is_file():
+            shutil.copy2(source, project / name)
+    return project
+
+def apply_packaging_patches(project, workspace, resume=False, drop=False):
+    state = read_json(workspace / 'input.json')
+    verify_package_input(workspace, state)
+    files = read_tree(workspace / 'pristine', state['pristineSha256'])
+    if resume:
+        report = json.loads((workspace / 'packaging.json').read_text(encoding='utf-8'))
+        names = read_series(project / 'patches')
+        pending = report.get('pending')
+        if pending:
+            patch = project / 'patches' / pending
+            updated = make_patch(read_tree(workspace / 'before', files), read_tree(project, files),
+                                      header(patch.read_text(encoding='utf-8')))
+            if updated is None:
+                if not drop:
+                    raise PatchError('No changes for the pending patch; resolve it or explicitly continue with --drop')
+                patch.unlink()
+                change_series(project / 'patches', remove=pending)
+                names.remove(pending)
+            else:
+                if drop:
+                    raise PatchError('Cannot drop a patch with staged changes; restore its before/ contents first')
+                patch.write_bytes(updated)
+                report['applied'].append(pending)
+            report.setdefault('resolvedConflicts', []).append({'patch': pending, 'action': 'drop' if updated is None else 'refresh',
+                                                              'error': report.pop('error', None)})
+            report.update(pending=None, patches=names)
+        elif drop:
+            raise PatchError('There is no pending patch to drop')
+    else:
+        write_tree(workspace / 'pristine', files)
+        write_tree(project, files)
+        names = read_series(project / 'patches')
+        report = {'status': 'applying', 'patches': names, 'applied': [], 'pending': None,
+                  'pristineSha256': {name: digest(data) for name, data in files.items()}}
+    for name in names[len(report['applied']):]:
+        report.update(status='applying', pending=name)
+        save_json(workspace / 'packaging.json', report)
+        # Keep the exact state before a conflicting patch for manual experiments.
+        write_tree(workspace / 'before', read_tree(project, files))
+        try:
+            apply_patch(project, project / 'patches' / name, files)
+        except PatchError as error:
+            report.update(status='patch-conflict', error=str(error))
+            save_json(workspace / 'packaging.json', report)
+            raise PatchError(f'{error}\nResolve experimentally in {project}; originals are in {workspace / "pristine"}') from error
+        report['applied'].append(name)
+        report['pending'] = None
+        save_json(workspace / 'packaging.json', report)
+    # Reconstruct independently to verify the overlay rather than trusting previous copies.
+    verification = workspace / 'reconstruction'
+    write_tree(verification, files)
+    for name in names:
+        apply_patch(verification, project / 'patches' / name, files)
+    if read_tree(verification, files) != read_tree(project, files):
+        raise PatchError('Packaging patch reconstruction differs from the staged sources')
+    report.pop('error', None)
+    report.update(status='patched', pending=None)
+    save_json(workspace / 'packaging.json', report)
+    return report
+
+def dependency_list(tree):
+    result = {}
+    def visit(node):
+        if (all(node.get(key) for key in ('groupId', 'artifactId', 'version'))
+                and str(node.get('optional', 'false')).lower() != 'true'
+                and node.get('scope') not in ('test', 'system') and node.get('type') == 'jar'):
+            result[(node['groupId'], node['artifactId'])] = node
+        for child in node.get('children', []):
+            visit(child)
+    visit(tree)
+    return list(result.values())
+
+def configure_pom(project, dependencies):
+    namespace = NS['m']
+    ET.register_namespace('', namespace)
+    ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    tree = ET.parse(project / 'pom.xml', parser=parser)
+    pom = tree.getroot()
+    tag = lambda name: '{' + namespace + '}' + name
+    for management in pom.findall('m:dependencyManagement/m:dependencies', NS):
+        for dependency in list(management):
+            if dependency.findtext('m:groupId', namespaces=NS) == 'org.eclipse.jdt':
+                management.remove(dependency)
+    existing = pom.find('m:dependencies', NS)
+    if existing is None:
+        raise PatchError('Packaging POM has no dependencies element')
+    selected = {(node['groupId'], node['artifactId']) for node in dependencies}
+    for dependency in list(existing):
+        coordinates = (dependency.findtext('m:groupId', namespaces=NS), dependency.findtext('m:artifactId', namespaces=NS))
+        generated = any(child.tag is ET.Comment and 'Generated from the Eclipse JDT dependency tree.' in (child.text or '')
+                        for child in dependency)
+        if coordinates[0] == 'org.eclipse.jdt' or coordinates in selected or generated:
+            existing.remove(dependency)
+    for node in dependencies:
+        dependency = ET.SubElement(existing, tag('dependency'))
+        for key in ('groupId', 'artifactId', 'version'):
+            ET.SubElement(dependency, tag(key)).text = node[key]
+        exclusion = ET.SubElement(ET.SubElement(dependency, tag('exclusions')), tag('exclusion'))
+        for key in ('groupId', 'artifactId'):
+            ET.SubElement(exclusion, tag(key)).text = '*'
+    ET.indent(tree, space='  ')
+    tree.write(project / 'pom.xml', encoding='utf-8', xml_declaration=True)
+
+def install_package_artifacts(workspace, state, settings, repository):
+    verify_package_input(workspace, state)
+    for metadata in state['source']['artifacts'].values():
+        command = maven(settings, repository)
+        if state.get('offline'):
+            command.append('--offline')
+        run(command + ['org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file',
+            '-Dfile=' + str(artifact_path(workspace, metadata, '.jar')),
+            '-DpomFile=' + str(artifact_path(workspace, metadata, '.pom')),
+            '-Dsources=' + str(artifact_path(workspace, metadata, '-sources.jar'))], workspace, workspace / 'install.log')
+
+
+def verify_installed_artifacts(workspace, state, repository):
+    for name, metadata in state['source']['artifacts'].items():
+        for suffix, checksum in metadata['sha256'].items():
+            path = repository / 'org/eclipse/jdt' / name / metadata['version'] / (name + '-' + metadata['version'] + suffix)
+            if digest(path.read_bytes()) != checksum:
+                raise PatchError(f'Installed artifact changed during packaging: {path}')
+
+
+def build_package(root, workspace, state, resume=False, drop=False):
+    verify_package_input(workspace, state)
+    project = workspace / 'packaging' if resume else stage_project(root, workspace)
+    manifest = read_json(project / MANIFEST)
+    validate_manifest(manifest)
+    validate_shade((project / 'pom.xml').read_bytes(), manifest)
+    report = apply_packaging_patches(project, workspace, resume, drop)
+    repository = Path(state['repository'])
+    settings = root / 'scripts/jdt-settings.xml'
+    try:
+        install_package_artifacts(workspace, state, settings, repository)
+        core = state['source']['artifacts'][CORE]
+        output = workspace / 'dependency-tree.json'
+        command = maven(settings, repository)
+        if state.get('offline'):
+            command.append('--offline')
+        run(command + ['--file', str(artifact_path(workspace, core, '.pom')), 'dependency:tree',
+            '-Dexcludes=' + EXCLUDES, '-DoutputEncoding=UTF-8', '-DoutputFile=' + str(output),
+            '-DoutputType=json', '-Dscope=compile'], workspace, workspace / 'dependencies.log')
+        dependencies = dependency_list(read_json(output))
+        for name, metadata in state['source']['artifacts'].items():
+            matches = [node for node in dependencies if node['groupId'] == 'org.eclipse.jdt' and node['artifactId'] == name]
+            if len(matches) != 1 or matches[0]['version'] != metadata['version']:
+                raise PatchError(f'Dependency tree does not select the captured {name}')
+        configure_pom(project, dependencies)
+        report.update(status='building', dependencies=dependencies)
+        save_json(workspace / 'packaging.json', report)
+        verify_installed_artifacts(workspace, state, repository)
+        run(command + ['clean', 'verify'], project, workspace / 'packaging.log')
+        verify_installed_artifacts(workspace, state, repository)
+        report['status'] = 'passed'
+    except Exception as error:
+        report.update(status='failed', error=str(error))
+        raise
+    finally:
+        save_json(workspace / 'packaging.json', report)
+    print(f'Shaded package and test reports: {project / "target"}')
+
+
+def package(root, args):
+    check_jdk(21)
+    directory = root / 'workdir/patched-jdt'
+    directory.mkdir(parents=True, exist_ok=True)
+    workspace = Path(tempfile.mkdtemp(prefix='package-', dir=directory))
+    repository = (args.maven_repo or directory / 'm2').resolve()
+    print(f'Packaging workspace and logs: {workspace}', flush=True)
+    try:
+        if args.local_build:
+            source, files = local_package_input(root, workspace, args.local_build)
+        else:
+            source, files = release_package_input(root, workspace, args, repository)
+        write_tree(workspace / 'pristine', files)
+        state = {'schemaVersion': 1, 'root': str(root), 'repository': str(repository),
+                 'offline': args.offline, 'source': source,
+                 'pristineSha256': {name: digest(data) for name, data in files.items()}}
+        save_json(workspace / 'input.json', state)
+        build_package(root, workspace, state)
+    except Exception:
+        print(f'Workspace retained: {workspace}', file=sys.stderr)
+        if (workspace / 'packaging.json').exists():
+            print('Resolve any pending patch or build failure, then run: ' + shlex.join([
+                sys.executable, str(Path(__file__).resolve()), 'continue-package', str(workspace)]), file=sys.stderr)
+        else:
+            print('Input capture did not finish; correct the error and rerun the package command.', file=sys.stderr)
+        raise
+
+
 def main(argv=None, root=ROOT):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -526,11 +827,40 @@ def main(argv=None, root=ROOT):
     continuation = commands.add_parser("continue", help="Refresh the pending patch from edited sources and resume")
     continuation.add_argument("workspace", type=Path)
     continuation.add_argument("--drop", action="store_true", help="Explicitly remove an empty/obsolete pending patch")
+    packaging = commands.add_parser("package", help="Patch, shade and test a release or captured local build in isolation")
+    source = packaging.add_mutually_exclusive_group(required=True)
+    source.add_argument("--version", help="Published JDT Core release")
+    source.add_argument("--local-build", type=Path, help="localJDT.py build directory or build.json")
+    packaging.add_argument("--maven-repo", type=Path, help="Packaging Maven cache (default: workdir/patched-jdt/m2)")
+    packaging.add_argument("--repository-url", help="Maven repository used to download released artifacts")
+    packaging.add_argument("--offline", action="store_true")
+    packaging.add_argument("--java-home", type=Path)
+    resume = commands.add_parser("continue-package", help="Resolve or retry an isolated packaging workspace")
+    resume.add_argument("workspace", type=Path)
+    resume.add_argument("--drop", action="store_true", help="Drop an empty pending experimental patch")
+    resume.add_argument("--java-home", type=Path)
+    network = resume.add_mutually_exclusive_group()
+    network.add_argument("--online", action="store_true", help="Allow missing Maven dependencies to be downloaded on retry")
+    network.add_argument("--offline", action="store_true", help="Use only cached Maven plugins and dependencies on retry")
     args = parser.parse_args(argv)
     try:
         root = root.resolve()
-        if args.command == "check":
-            with tempfile.TemporaryDirectory(prefix="ecj-check-") as temporary:
+        if args.command == "package":
+            select_jdk(args.java_home)
+            package(root, args)
+        elif args.command == "continue-package":
+            select_jdk(args.java_home)
+            check_jdk(21)
+            workspace = args.workspace.resolve()
+            state = read_json(workspace / 'input.json')
+            if Path(state['root']) != root:
+                raise PatchError('Packaging workspace belongs to another repository')
+            if args.online or args.offline:
+                state['offline'] = args.offline
+                save_json(workspace / 'input.json', state)
+            build_package(root, workspace, state, resume=True, drop=args.drop)
+        elif args.command == "check":
+            with tempfile.TemporaryDirectory(prefix="jdt-check-") as temporary:
                 directory = Path(temporary)
                 artifacts = make_artifacts(args, directory / "downloads")
                 check(root, artifacts, directory / "work")
@@ -548,7 +878,7 @@ def main(argv=None, root=ROOT):
             advance(stage, state)
         else:
             start(root, args)
-    except (PatchError, OSError, ValueError, KeyError, ET.ParseError, zipfile.BadZipFile) as error:
+    except (PatchError, WorkflowError, OSError, ValueError, KeyError, ET.ParseError, zipfile.BadZipFile) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
     return 0

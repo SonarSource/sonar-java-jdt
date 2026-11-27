@@ -34,3 +34,7 @@ Desktop.ini
 .sonar
 .scannerwork
 dependency-reduced-pom.xml
+
+# Local JDT development and experimental packaging
+/workdir/local-jdt/
+/workdir/patched-jdt/
