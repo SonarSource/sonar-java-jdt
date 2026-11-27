@@ -22,9 +22,10 @@ http://maven.apache.org/xsd/settings-1.0.0.xsd">
             <enabled>false</enabled>
           </snapshots>
         </repository>
+        <!-- Keep this ID distinct from the Eclipse parent POM's "eclipse" p2 repository. -->
         <repository>
-          <id>eclipse</id>
-          <name>eclipse</name>
+          <id>eclipse-maven</id>
+          <name>eclipse-maven</name>
           <url>https://repo.eclipse.org/content/repositories/eclipse</url>
           <releases>
             <enabled>true</enabled>
@@ -69,8 +70,8 @@ http://maven.apache.org/xsd/settings-1.0.0.xsd">
           </snapshots>
         </pluginRepository>
         <pluginRepository>
-          <id>eclipse</id>
-          <name>eclipse</name>
+          <id>eclipse-maven</id>
+          <name>eclipse-maven</name>
           <url>https://repo.eclipse.org/content/repositories/eclipse</url>
           <releases>
             <enabled>true</enabled>

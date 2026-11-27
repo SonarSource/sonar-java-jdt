@@ -9,14 +9,6 @@
         "org.eclipse.jdt:org.eclipse.jdt.core"
       ],
       "enabled": false
-    },
-    {
-      "matchFileNames": [
-        "build-eclipse-jdt-core-branch/**"
-      ],
-      "extends": [
-        "schedule:quarterly"
-      ]
     }
   ]
 }
